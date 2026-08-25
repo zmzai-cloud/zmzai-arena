@@ -1,23 +1,27 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { agents, type Agent } from "@/data/agents";
+import { agents as STATIC_AGENTS, type Agent } from "@/data/agents";
+import { loadUserAgents } from "@/lib/userAgents";
 import { fmtPct, riskColor, tierBadge } from "@/lib/format";
 
 type SortKey = "totalReturn" | "maxDD" | "sharpe" | "riskScore";
 
-const markets = ["全部", ...Array.from(new Set(agents.map((a) => a.market)))];
+const markets = ["全部", ...Array.from(new Set(STATIC_AGENTS.map((a) => a.market)))];
 
 export function Leaderboard() {
   const [filter, setFilter] = useState("全部");
   const [sortKey, setSortKey] = useState<SortKey>("sharpe");
   const [dir, setDir] = useState<-1 | 1>(-1);
+  const [userAgents, setUserAgents] = useState<Agent[]>([]);
+  useEffect(() => setUserAgents(loadUserAgents()), []);
 
   const list = useMemo(() => {
-    const f = agents.filter((a) => filter === "全部" || a.market === filter);
+    const all = [...STATIC_AGENTS, ...userAgents];
+    const f = all.filter((a) => filter === "全部" || a.market === filter);
     return [...f].sort((a, b) => (a[sortKey] - b[sortKey]) * dir);
-  }, [filter, sortKey, dir]);
+  }, [filter, sortKey, dir, userAgents]);
 
   const toggleSort = (k: SortKey) => {
     if (k === sortKey) setDir((d) => (d === -1 ? 1 : -1));

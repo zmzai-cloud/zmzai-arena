@@ -60,7 +60,7 @@ export interface Agent {
 // 全市场行情只生成一次（确定性种子），所有智能体共用同一段可复现行情
 const GLOBAL_SEED = 20260825;
 const MARKET_DAYS = 360;
-const market = generateMarket(MARKET_DAYS, GLOBAL_SEED);
+export const market = generateMarket(MARKET_DAYS, GLOBAL_SEED);
 
 // 每个智能体的仿真参数（与 META 人设一一对应），供压力测试复用；定义见 META 之后。
 

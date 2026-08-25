@@ -31,7 +31,9 @@ export function Nav() {
             排行榜
           </Link>
           <span className="cursor-pointer rounded-lg px-3 py-1.5 hover:bg-surface-2">发现</span>
-          <span className="cursor-pointer rounded-lg px-3 py-1.5 hover:bg-surface-2">创建</span>
+          <Link href="/create" className="rounded-lg px-3 py-1.5 hover:bg-surface-2">
+            创建
+          </Link>
           <Link href="/me" className="rounded-lg px-3 py-1.5 hover:bg-surface-2">
             我的
           </Link>
@@ -61,7 +63,7 @@ export function Nav() {
             </a>
           )}
           <Link
-            href="/me"
+            href="/create"
             className="rounded-lg bg-accent px-3 py-1.5 text-[13px] font-semibold text-accent-ink"
           >
             + 创建智能体

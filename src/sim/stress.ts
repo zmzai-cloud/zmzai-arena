@@ -7,7 +7,7 @@
 // - 三类历史场景各有差异化的市场强度（A股/港股/美股/加密受冲击不同），制造丰富的分化结果。
 
 import { INSTRUMENTS, type MarketKind, type PriceSeries } from "./market";
-import { STRATEGIES } from "./strategies";
+import { STRATEGIES, type StrategyConfig } from "./strategies";
 import { runSimulation, type Tier as SimTier } from "./engine";
 
 export type StressStatus = "稳健" | "承压" | "重创" | "爆仓";
@@ -137,6 +137,33 @@ function classify(totalReturn: number): { status: StressStatus; survived: boolea
   if (totalReturn <= -18) return { status: "重创", survived: true };
   if (totalReturn < 0) return { status: "承压", survived: true };
   return { status: "稳健", survived: true };
+}
+
+// 对任意单个策略配置跑全部黑天鹅场景，返回 { scenarioId: AgentStress }。
+// 与 runStressTest 共用 stressMarket / classify，供用户创建的 Agent 复用（其 id 不在静态 STRATEGIES 中）。
+export function stressForConfig(
+  base: PriceSeries,
+  cfg: StrategyConfig,
+  spec: SimSpec
+): Record<string, AgentStress> {
+  const map: Record<string, AgentStress> = {};
+  for (const scn of STRESS_SCENARIOS) {
+    const stressed = stressMarket(base, scn);
+    const res = runSimulation(cfg, stressed, spec.simDays, spec.seed, spec.tier);
+    const tr = res.metrics.totalReturn;
+    const { status, survived } = classify(tr);
+    map[scn.id] = {
+      agentId: cfg.id,
+      scenarioId: scn.id,
+      totalReturn: tr,
+      maxDD: res.metrics.maxDD,
+      sharpe: res.metrics.sharpe,
+      finalNav: res.nav[res.nav.length - 1],
+      status,
+      survived,
+    };
+  }
+  return map;
 }
 
 // 对全部场景跑全部 Agent。base 为 P1 用的同一段基础行情；specs 携带每个 Agent 的 tier/simDays/seed。

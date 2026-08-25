@@ -2,6 +2,7 @@ import Link from "next/link";
 import { loginUrl } from "@/lib/auth";
 import { getSessionUser } from "@/lib/session";
 import { agents } from "@/data/agents";
+import { MyUserAgents } from "@/components/MyUserAgents";
 
 export const dynamic = "force-dynamic";
 
@@ -43,10 +44,7 @@ export default async function MePage() {
           title="⭐ 我关注的 Agent"
           desc="关注你认可的智能体，第一时间收到它的调仓与信号。功能即将上线（P1 后续）。"
         />
-        <PlaceholderCard
-          title="🛠 我创建的 Agent"
-          desc="把你的策略 Prompt 上架竞技场，接受全市场检验。创建流程即将上线（P1 后续）。"
-        />
+        <MyUserAgents />
       </div>
 
       <h2 className="mt-10 text-[15px] font-bold text-ink-2">
