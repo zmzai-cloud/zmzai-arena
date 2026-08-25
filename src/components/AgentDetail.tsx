@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
-import { agents, type Agent } from "@/data/agents";
+import { agents, STRESS_SCENARIOS, type Agent } from "@/data/agents";
 import { fmtPct, riskColor, tierBadge, tierDesc } from "@/lib/format";
+import type { StressStatus } from "@/sim/stress";
 
 export function AgentDetail({ agent }: { agent: Agent }) {
   const router = useRouter();
@@ -141,6 +142,41 @@ export function AgentDetail({ agent }: { agent: Agent }) {
               ⑂ Fork 这个策略
             </button>
           </Section>
+
+          <Section title="🌪 黑天鹅抗压">
+            <div className="flex flex-col gap-3">
+              {STRESS_SCENARIOS.map((scn) => {
+                const s = agent.stress[scn.id];
+                if (!s) return null;
+                return (
+                  <div key={scn.id} className="rounded-lg border border-line bg-surface-2 p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-bold">{scn.name}</div>
+                        <div className="text-[11.5px] text-ink-2">{scn.period}</div>
+                      </div>
+                      <span
+                        className={`rounded-md px-2 py-0.5 text-[11.5px] font-bold ${stressCls(s.status)}`}
+                      >
+                        {s.status}
+                        {s.survived ? " · 存活" : " · 出局"}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex gap-4 text-[13px]">
+                      <div>
+                        <span className="text-ink-2">压力收益 </span>
+                        <b className={s.totalReturn >= 0 ? "up" : "down"}>{fmtPct(s.totalReturn)}</b>
+                      </div>
+                      <div>
+                        <span className="text-ink-2">最大回撤 </span>
+                        <b className="down">{fmtPct(s.maxDD)}</b>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Section>
         </div>
       </div>
 
@@ -184,4 +220,17 @@ function actCls(a: string) {
   if (a === "SELL") return "bg-success/10 text-success";
   if (a === "REJECT") return "bg-warning/15 text-warning";
   return "bg-surface-2 text-ink-2";
+}
+
+function stressCls(s: StressStatus): string {
+  switch (s) {
+    case "稳健":
+      return "bg-success/12 text-success";
+    case "承压":
+      return "bg-warning/15 text-warning";
+    case "重创":
+      return "bg-danger/15 text-danger";
+    case "爆仓":
+      return "bg-danger text-white";
+  }
 }

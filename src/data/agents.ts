@@ -7,6 +7,13 @@
 import { generateMarket, INSTRUMENT_MAP } from "@/sim/market";
 import { STRATEGIES } from "@/sim/strategies";
 import { runSimulation, type Tier as SimTier, type RawDecision } from "@/sim/engine";
+import {
+  runStressTest,
+  STRESS_SCENARIOS,
+  type AgentStress,
+  type SimSpec,
+  type ScenarioResult,
+} from "@/sim/stress";
 
 export type Tier = "Live" | "Forward" | "Backtest" | "Paper";
 export type ActionType = "BUY" | "SELL" | "HOLD" | "REJECT";
@@ -47,12 +54,15 @@ export interface Agent {
   guard: string; // 风控护栏说明
   positions: Position[];
   log: Decision[];
+  stress: Record<string, AgentStress>; // 黑天鹅压力测试：每场景受压结果（key=scenarioId）
 }
 
 // 全市场行情只生成一次（确定性种子），所有智能体共用同一段可复现行情
 const GLOBAL_SEED = 20260825;
 const MARKET_DAYS = 360;
 const market = generateMarket(MARKET_DAYS, GLOBAL_SEED);
+
+// 每个智能体的仿真参数（与 META 人设一一对应），供压力测试复用；定义见 META 之后。
 
 interface Meta {
   id: number;
@@ -318,6 +328,28 @@ function toDecision(r: RawDecision, m: Meta): Decision {
   };
 }
 
+// 每个智能体的仿真参数（与 META 人设一一对应），供压力测试复用
+const SIM_SPECS: SimSpec[] = META.map((m) => ({
+  id: m.id,
+  tier: m.tier as SimTier,
+  simDays: m.simDays,
+  seed: m.seed,
+}));
+
+// 黑天鹅压力测试：在「同一段基础行情」上叠加 3 类历史极端行情，重跑全部智能体
+export const stressResults: ScenarioResult[] = runStressTest(market, SIM_SPECS);
+
+export { STRESS_SCENARIOS };
+
+function stressFor(agentId: number): Record<string, AgentStress> {
+  const map: Record<string, AgentStress> = {};
+  for (const scn of stressResults) {
+    const a = scn.agents.find((x) => x.agentId === agentId);
+    if (a) map[scn.scenario.id] = a;
+  }
+  return map;
+}
+
 export const agents: Agent[] = META.map((m) => {
   const cfg = STRATEGIES.find((s) => s.id === m.id)!;
   const res = runSimulation(cfg, market, m.simDays, m.seed, m.tier as SimTier);
@@ -342,6 +374,7 @@ export const agents: Agent[] = META.map((m) => {
     guard: m.guard,
     positions: res.positions,
     log: res.decisions.map((r) => toDecision(r, m)).slice(-12),
+    stress: stressFor(m.id),
   };
 });
 
