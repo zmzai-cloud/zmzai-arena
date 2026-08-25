@@ -11,10 +11,21 @@ export interface SessionUser {
   role: string;
 }
 
+// next 必须是绝对 URL（含子域），否则 auth 登录后回跳会落到 auth 自身域而非 arena。
+// arena 这边只拿到相对 pathname，故自动补上当前 origin。
+function absNext(next: string): string {
+  if (/^https?:\/\//.test(next)) return next;
+  const origin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "";
+  return `${origin}${next || "/"}`;
+}
+
 export function loginUrl(next: string): string {
-  return `${AUTH_ORIGIN}/login?next=${encodeURIComponent(next || "/")}`;
+  return `${AUTH_ORIGIN}/login?next=${encodeURIComponent(absNext(next))}`;
 }
 
 export function logoutUrl(next: string): string {
-  return `${AUTH_ORIGIN}/logout?next=${encodeURIComponent(next || "/")}`;
+  return `${AUTH_ORIGIN}/logout?next=${encodeURIComponent(absNext(next))}`;
 }
