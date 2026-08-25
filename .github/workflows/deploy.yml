@@ -56,7 +56,8 @@ jobs:
 
       - name: Pack artifact
         run: |
-          FILES=".next package.json pnpm-lock.yaml pnpm-workspace.yaml"
+          FILES=".next package.json pnpm-lock.yaml"
+          [ -e pnpm-workspace.yaml ] && FILES="$FILES pnpm-workspace.yaml"
           for p in next.config.ts next.config.mjs next.config.js public messages content scripts middleware.ts src; do
             [ -e "$p" ] && FILES="$FILES $p"
           done
