@@ -1,13 +1,16 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { agents, STRESS_SCENARIOS, type Agent } from "@/data/agents";
 import { fmtPct, riskColor, tierBadge, tierDesc } from "@/lib/format";
+import { useIsFollowed, toggleFollow } from "@/lib/follows";
 import type { StressStatus } from "@/sim/stress";
 
 export function AgentDetail({ agent }: { agent: Agent }) {
   const router = useRouter();
+  const followed = useIsFollowed(agent.id);
   const tb = tierBadge(agent.tier);
   const rank =
     [...agents].sort((a, b) => b.sharpe - a.sharpe).findIndex((x) => x.id === agent.id) + 1;
@@ -33,17 +36,19 @@ export function AgentDetail({ agent }: { agent: Agent }) {
         </div>
         <div className="ml-auto flex gap-2">
           <button
-            className="rounded-lg border border-line bg-surface px-3 py-2 text-[13px] font-semibold"
-            onClick={() => alert(`关注 ${agent.name}`)}
+            className={`rounded-lg border px-3 py-2 text-[13px] font-semibold ${
+              followed ? "border-accent bg-accent/10 text-accent" : "border-line bg-surface text-ink"
+            }`}
+            onClick={() => toggleFollow(agent.id)}
           >
-            + 关注 ({agent.followers})
+            {followed ? "✔ 已关注" : "+ 关注"} ({agent.followers + (followed ? 1 : 0)})
           </button>
-          <button
+          <Link
+            href="/create"
             className="rounded-lg bg-accent px-3 py-2 text-[13px] font-semibold text-accent-ink"
-            onClick={() => alert(`Fork ${agent.name} 策略`)}
           >
             ⑂ Fork 策略
-          </button>
+          </Link>
         </div>
       </div>
 

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { agents as STATIC_AGENTS, type Agent } from "@/data/agents";
 import { loadUserAgents } from "@/lib/userAgents";
+import { useIsFollowed, toggleFollow } from "@/lib/follows";
 import { fmtPct, riskColor, tierBadge } from "@/lib/format";
 
 type SortKey = "totalReturn" | "maxDD" | "sharpe" | "riskScore";
@@ -74,6 +75,7 @@ export function Leaderboard() {
                 风险分{arrow("riskScore")}
               </th>
               <th className="px-3.5 py-3 text-left font-bold">天数</th>
+              <th className="px-3.5 py-3 text-center font-bold">关注</th>
             </tr>
           </thead>
           <tbody>
@@ -135,6 +137,24 @@ function Row({ a, rank }: { a: Agent; rank: number }) {
         <span className="ml-2">{a.riskScore}</span>
       </td>
       <td className="px-3.5 py-3 text-ink-2">{a.days || "—"}</td>
+      <td className="px-3.5 py-3 text-center">
+        <FollowStar id={a.id} />
+      </td>
     </tr>
+  );
+}
+
+function FollowStar({ id }: { id: number }) {
+  const followed = useIsFollowed(id);
+  return (
+    <button
+      onClick={() => toggleFollow(id)}
+      title={followed ? "取消关注" : "关注"}
+      className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-[17px] transition ${
+        followed ? "bg-accent/10 text-accent" : "bg-surface-2 text-ink-3 hover:text-accent"
+      }`}
+    >
+      {followed ? "★" : "☆"}
+    </button>
   );
 }

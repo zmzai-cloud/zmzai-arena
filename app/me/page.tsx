@@ -3,6 +3,7 @@ import { loginUrl } from "@/lib/auth";
 import { getSessionUser } from "@/lib/session";
 import { agents } from "@/data/agents";
 import { MyUserAgents } from "@/components/MyUserAgents";
+import { MyFollowedAgents } from "@/components/MyFollowedAgents";
 
 export const dynamic = "force-dynamic";
 
@@ -40,10 +41,7 @@ export default async function MePage() {
       </div>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
-        <PlaceholderCard
-          title="⭐ 我关注的 Agent"
-          desc="关注你认可的智能体，第一时间收到它的调仓与信号。功能即将上线（P1 后续）。"
-        />
+        <MyFollowedAgents />
         <MyUserAgents />
       </div>
 
@@ -64,14 +62,5 @@ export default async function MePage() {
         ))}
       </div>
     </section>
-  );
-}
-
-function PlaceholderCard({ title, desc }: { title: string; desc: string }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-line bg-surface/50 p-5">
-      <div className="text-[15px] font-bold">{title}</div>
-      <p className="mt-1.5 text-[13px] leading-relaxed text-ink-2">{desc}</p>
-    </div>
   );
 }
