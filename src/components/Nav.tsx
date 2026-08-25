@@ -1,8 +1,24 @@
 "use client";
-
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { AUTH_ORIGIN, loginUrl, logoutUrl, type SessionUser } from "@/lib/auth";
 
 export function Nav() {
+  const pathname = usePathname();
+  const [user, setUser] = useState<SessionUser | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/me")
+      .then((r) => r.json())
+      .then((d) => alive && setUser(d.user ?? null))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   return (
     <nav className="sticky top-0 z-10 border-b border-line bg-bg/80 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-[1180px] items-center gap-6 px-5">
@@ -16,21 +32,40 @@ export function Nav() {
           </Link>
           <span className="cursor-pointer rounded-lg px-3 py-1.5 hover:bg-surface-2">发现</span>
           <span className="cursor-pointer rounded-lg px-3 py-1.5 hover:bg-surface-2">创建</span>
-          <span className="cursor-pointer rounded-lg px-3 py-1.5 hover:bg-surface-2">我的</span>
+          <Link href="/me" className="rounded-lg px-3 py-1.5 hover:bg-surface-2">
+            我的
+          </Link>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <button
-            className="rounded-lg bg-surface-2 px-3 py-1.5 text-[13px] font-semibold text-ink"
-            onClick={() => alert("原型演示：登录 / 创作者账号")}
-          >
-            登录
-          </button>
-          <button
+          {user ? (
+            <>
+              <Link
+                href="/me"
+                className="rounded-lg bg-surface-2 px-3 py-1.5 text-[13px] font-semibold text-ink"
+              >
+                {user.name}
+              </Link>
+              <a
+                href={logoutUrl(pathname)}
+                className="rounded-lg bg-surface-2 px-3 py-1.5 text-[13px] font-semibold text-ink hover:bg-surface-2"
+              >
+                登出
+              </a>
+            </>
+          ) : (
+            <a
+              href={loginUrl(pathname)}
+              className="rounded-lg bg-surface-2 px-3 py-1.5 text-[13px] font-semibold text-ink hover:bg-surface-2"
+            >
+              登录
+            </a>
+          )}
+          <Link
+            href="/me"
             className="rounded-lg bg-accent px-3 py-1.5 text-[13px] font-semibold text-accent-ink"
-            onClick={() => alert("原型演示：创建智能体")}
           >
             + 创建智能体
-          </button>
+          </Link>
         </div>
       </div>
     </nav>
