@@ -260,6 +260,17 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             模拟收益换算，仅作展示——历史业绩不代表未来表现，不构成投资建议。
           </div>
         </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3">
+          <Link
+            href={`/portfolio?follow=${agent.id}&capital=${invest}`}
+            className="rounded bg-accent px-4 py-2 text-[13px] font-bold text-accent-ink transition-colors hover:opacity-90"
+          >
+            一键跟投 ¥{invest.toLocaleString("zh-CN")}
+          </Link>
+          <span className="text-[11.5px] text-ink-3">
+            拿虚拟资金跟随它的持仓与收益，随时可同步调仓 / 取消
+          </span>
+        </div>
       </div>
 
       {/* 预期收益区间（真实对照分布，68% 区间 + 全范围） */}

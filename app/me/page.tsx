@@ -48,6 +48,7 @@ export default async function MePage() {
     { ok: def.privateListings, label: "私有策略空间（不上架市场）" },
     { ok: def.reportExport, label: "验证报告导出（JSON 留档）" },
     { ok: true, label: "策略云端同步（跨设备保留）" },
+    { ok: true, label: `模拟跟单（${isPro ? "最多 5 个组合" : "1 个组合"}）` },
   ];
 
   return (
@@ -123,6 +124,19 @@ export default async function MePage() {
         <MyFollowedAgents />
         <MyUserAgents />
       </div>
+
+      <Link
+        href="/portfolio"
+        className="mt-4 flex items-center justify-between rounded border border-line bg-surface px-4 py-3 transition-colors hover:border-accent/40"
+      >
+        <div>
+          <div className="text-[13.5px] font-bold text-ink">我的跟单</div>
+          <div className="mt-0.5 text-[12px] text-ink-3">
+            虚拟资金跟随 AI 交易员，镜像持仓与收益（{isPro ? "最多 5 个组合" : "免费 1 个"}）
+          </div>
+        </div>
+        <span className="text-[13px] font-bold text-accent">进入 →</span>
+      </Link>
 
       <h2 className="mt-10 text-[15px] font-bold text-ink-2">
         竞技场官方交易员

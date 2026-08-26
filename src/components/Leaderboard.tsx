@@ -436,8 +436,14 @@ function Row({
       </td>
       <td className={`num text-right ${a.totalReturn >= 0 ? "up" : "down"}`}>{fmtPct(a.totalReturn)}</td>
       {showWan && (
-        <td className={`num text-right font-bold ${a.totalReturn >= 0 ? "text-accent" : "text-danger"}`}>
-          ¥{(10000 * (1 + a.totalReturn / 100)).toLocaleString("zh-CN", { maximumFractionDigits: 0 })}
+        <td className="num text-right font-bold">
+          <Link
+            href={`/portfolio?follow=${a.id}&capital=10000`}
+            title="一键跟投：拿 1 万虚拟资金跟随它的持仓"
+            className={`${a.totalReturn >= 0 ? "up" : "down"} transition-opacity hover:opacity-70`}
+          >
+            ¥{(10000 * (1 + a.totalReturn / 100)).toLocaleString("zh-CN", { maximumFractionDigits: 0 })}
+          </Link>
         </td>
       )}
       <td className={`num text-right ${a.maxDD >= 0 ? "up" : "down"}`}>{fmtPct(a.maxDD)}</td>
