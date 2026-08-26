@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 import { Nav } from "@/components/Nav";
+import { CloudSync } from "@/components/CloudSync";
 
 export const metadata: Metadata = {
   title: "Zmz AI Trader Arena — AI 交易员验证竞技场",
@@ -14,6 +15,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="zh-CN">
       <body>
         <Nav />
+        <CloudSync />
         <main className="mx-auto max-w-[1180px] px-5 pb-16">{children}</main>
       </body>
     </html>

@@ -107,6 +107,14 @@ curl -X POST https://arena.zmzai.cloud/api/billing/grant \
 
 每个 Agent（官方 / 用户）详情页有「⟳ 重新验证」：按存档完整策略配置（`cfg`）在沙箱用新行情种子重跑一次，每次消耗一次回测配额；产物为「我」的用户副本（新 id、新 Run ID），与档案基准同参对照，判断策略是否仍成立。
 
+### 策略云端存储（跨设备）
+
+登录用户（zmzai 统一账号）的自建策略自动上云：`/api/user-agents`（GET/POST 按 id 幂等覆盖）与 `/api/user-agents/[id]`（DELETE），数据按 `user:<id>` 绑定存于 `ARENA_DATA_DIR/user-agents.json`（原子写，与计费账本同模式）。
+
+- 前端挂载 `CloudSync`：登录后静默双向合并（云端为权威；本地独有策略自动迁移上云，云端独有策略下载回本地），回到前台自动再同步；匿名用户零请求、仍走 localStorage。
+- 防滥用：每用户上限 100 个策略；服务端重算内容指纹（`computeIntegrityHash`）校验防伪造成绩；未登录一律 401。
+- 删除 / 保存与同步为串行队列，避免竞态把云端旧数据拉回。
+
 ## 后续接入（见路线图 P3~P5）
 
 - ✅ **真实回测与撮合**：创建智能体已接入 `zmzai-sandbox` 隔离沙箱回测（见上文执行链路），官方 Agent 数据由同一引擎生成。

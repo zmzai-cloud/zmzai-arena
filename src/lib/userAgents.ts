@@ -14,6 +14,7 @@ import { computeIntegrityHash } from "@/lib/integrity";
 import { type Agent, type Decision, market, agents as STATIC_AGENTS } from "@/data/agents";
 import { type StrategyConfig, type StyleKey } from "@/sim/strategies";
 import type { Metrics } from "@/sim/metrics";
+import type { SessionUser } from "@/lib/auth";
 
 // ---------- 表单可选配置 ----------
 
@@ -430,6 +431,8 @@ export function saveUserAgent(a: Agent): void {
   const list = loadUserAgents();
   list.push(a);
   if (typeof window !== "undefined") localStorage.setItem(LS_KEY, JSON.stringify(list));
+  // 登录用户同时异步上传云端（跨设备）；失败静默，下次同步会补传
+  void uploadIfLoggedIn(a);
 }
 
 export function getUserAgent(id: number): Agent | undefined {
@@ -439,6 +442,117 @@ export function getUserAgent(id: number): Agent | undefined {
 export function deleteUserAgent(id: number): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(LS_KEY, JSON.stringify(loadUserAgents().filter((a) => a.id !== id)));
+  void deleteIfLoggedIn(id);
+}
+
+// ---------- 云端同步（登录用户跨设备；匿名纯本地，零请求） ----------
+
+let cachedUser: { user: SessionUser | null; at: number } | null = null;
+const USER_TTL = 5 * 60_000; // 登录态缓存 5 分钟，避免每次读写都打 /api/me
+
+async function currentUser(): Promise<SessionUser | null> {
+  if (cachedUser && Date.now() - cachedUser.at < USER_TTL) return cachedUser.user;
+  try {
+    const r = await fetch("/api/me", { cache: "no-store" });
+    if (!r.ok) {
+      cachedUser = { user: null, at: Date.now() };
+      return null;
+    }
+    const d = (await r.json()) as { user: SessionUser | null };
+    cachedUser = { user: d.user ?? null, at: Date.now() };
+    return cachedUser.user;
+  } catch {
+    cachedUser = { user: null, at: Date.now() };
+    return null;
+  }
+}
+
+let syncing = false;
+
+// 单客户端内的云端操作串行队列：保存/删除/同步按调用顺序执行，
+// 避免「删除后同步又把云端旧数据拉回来」之类的竞态（服务端按 id 幂等覆盖）。
+let opChain: Promise<unknown> = Promise.resolve();
+function chained<T>(fn: () => Promise<T>): Promise<T> {
+  const p = opChain.then(fn, fn);
+  opChain = p.catch(() => undefined);
+  return p;
+}
+
+/** 同步完成后通知订阅方（如「我的策略」列表刷新） */
+function notifySynced(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("zmzai:agents-synced"));
+}
+
+/**
+ * 登录后静默同步：云端 ↔ 本地双向合并（按 id 去重，云端为权威）。
+ * 本地独有的策略自动上传（登录前创建的策略迁移上云），云端独有的下载（跨设备恢复）。
+ * 匿名 / 网络失败静默返回，不打扰用户。
+ */
+export function syncUserAgents(): Promise<void> {
+  return chained(async () => {
+    if (syncing) return;
+    const user = await currentUser();
+    if (!user) return;
+    syncing = true;
+    try {
+      const r = await fetch("/api/user-agents", { cache: "no-store" });
+      if (!r.ok) return;
+      const data = (await r.json()) as { agents: Agent[] };
+      const cloud = data.agents ?? [];
+      const local = loadUserAgents();
+      const cloudIds = new Set(cloud.map((a) => a.id));
+
+      // 本地独有 → 上传（登录前创建的策略迁移上云）
+      for (const a of local.filter((x) => !cloudIds.has(x.id))) {
+        try {
+          await fetch("/api/user-agents", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(a),
+          });
+        } catch {
+          // 单条失败不影响整体，下次同步重试
+        }
+      }
+
+      // 云端独有 → 下载；合并写回本地（云端为权威，同 id 内容一致）
+      const merged = [...cloud, ...local.filter((x) => cloudIds.has(x.id))];
+      if (typeof window !== "undefined") {
+        localStorage.setItem(LS_KEY, JSON.stringify(merged));
+        notifySynced();
+      }
+    } finally {
+      syncing = false;
+    }
+  });
+}
+
+function uploadIfLoggedIn(a: Agent): void {
+  void chained(async () => {
+    const user = await currentUser();
+    if (!user) return;
+    try {
+      await fetch("/api/user-agents", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(a),
+      });
+    } catch {
+      // 网络失败静默；下次 syncUserAgents 会补传
+    }
+  });
+}
+
+function deleteIfLoggedIn(id: number): void {
+  void chained(async () => {
+    const user = await currentUser();
+    if (!user) return;
+    try {
+      await fetch(`/api/user-agents/${id}`, { method: "DELETE" });
+    } catch {
+      // 网络失败静默；云端残留由下次删除重试
+    }
+  });
 }
 
 // 排行榜用：官方（静态）+ 用户（localStorage）合并

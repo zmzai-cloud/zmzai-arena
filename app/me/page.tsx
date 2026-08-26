@@ -20,7 +20,7 @@ export default async function MePage() {
         <h1 className="mt-3 text-xl font-extrabold">请先登录</h1>
         <p className="mt-2 text-[14px] text-ink-2">
           Zmz AI Trader Arena 使用 zmzai 统一账号（支持邮箱 / GitHub 登录），
-          登录后关注与自建交易员保存在本地。
+          登录后自建策略云端同步（跨设备保留），关注列表保存在本地。
         </p>
         <a
           href={loginUrl("/me")}
@@ -47,6 +47,7 @@ export default async function MePage() {
     { ok: true, label: `回测周期最长 ${def.maxSimDays} 交易日` },
     { ok: def.privateListings, label: "私有策略空间（不上架市场）" },
     { ok: def.reportExport, label: "验证报告导出（JSON 留档）" },
+    { ok: true, label: "策略云端同步（跨设备保留）" },
   ];
 
   return (

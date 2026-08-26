@@ -8,7 +8,13 @@ import { fmtPct, engineBadge, engineCls } from "@/lib/format";
 
 export function MyUserAgents() {
   const [list, setList] = useState<Agent[]>([]);
-  useEffect(() => setList(loadUserAgents()), []);
+  useEffect(() => {
+    setList(loadUserAgents());
+    // 云端同步完成（登录后跨设备恢复 / 本地迁移上云）时刷新
+    const onSynced = () => setList(loadUserAgents());
+    window.addEventListener("zmzai:agents-synced", onSynced);
+    return () => window.removeEventListener("zmzai:agents-synced", onSynced);
+  }, []);
 
   if (list.length === 0) {
     return (
