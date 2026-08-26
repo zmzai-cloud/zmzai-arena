@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicKey, verify } from "node:crypto";
 import { PLAN } from "@/lib/billing";
-import { setPlan } from "@/lib/billing-store";
+import { setPlan, BillingStoreError } from "@/lib/billing-store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -48,16 +48,24 @@ export async function POST(req: NextRequest) {
   }
 
   const type = event.event_type ?? "";
-  if (type === "transaction.completed") {
-    const key = readAccountKey(event.data);
-    if (key) {
-      const days = Number(process.env.PADDLE_PRO_DURATION_DAYS ?? "30") || 30;
-      const expiresAt = new Date(Date.now() + days * 86_400_000).toISOString();
-      setPlan(key, PLAN.PRO, "paddle", expiresAt);
+  try {
+    if (type === "transaction.completed") {
+      const key = readAccountKey(event.data);
+      if (key) {
+        const days = Number(process.env.PADDLE_PRO_DURATION_DAYS ?? "30") || 30;
+        const expiresAt = new Date(Date.now() + days * 86_400_000).toISOString();
+        setPlan(key, PLAN.PRO, "paddle", expiresAt);
+      }
+    } else if (type === "subscription.canceled" || type === "subscription.expired") {
+      const key = readAccountKey(event.data);
+      if (key) setPlan(key, PLAN.FREE, "paddle");
     }
-  } else if (type === "subscription.canceled" || type === "subscription.expired") {
-    const key = readAccountKey(event.data);
-    if (key) setPlan(key, PLAN.FREE, "paddle");
+  } catch (e) {
+    if (e instanceof BillingStoreError) {
+      // 落账失败返回 503：Paddle 会按重试策略重新推送，不丢单
+      return NextResponse.json({ code: "BILLING_UNAVAILABLE" }, { status: 503 });
+    }
+    throw e;
   }
 
   return NextResponse.json({ received: true });

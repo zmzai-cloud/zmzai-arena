@@ -63,6 +63,23 @@ function persist(): void {
   renameSync(tmp, filePath()); // 原子替换
 }
 
+/** 存储层不可用（磁盘只读 / 权限缺失 / 目录不可建）时抛出，调用方应返回 503。 */
+export class BillingStoreError extends Error {
+  constructor(cause: unknown) {
+    super("计费账本不可写（存储层不可用）");
+    this.name = "BillingStoreError";
+    this.cause = cause;
+  }
+}
+
+function persistSafe(): void {
+  try {
+    persist();
+  } catch (e) {
+    throw new BillingStoreError(e);
+  }
+}
+
 function windowEnd(): string {
   return new Date(Date.now() + QUOTA_WINDOW_DAYS * 86_400_000).toISOString();
 }
@@ -85,14 +102,24 @@ export function getAccount(userId: string): Account {
   if (!acc) {
     acc = defaultAccount(userId);
     map.set(userId, acc);
-    persist();
+    try {
+      persistSafe();
+    } catch (e) {
+      map.delete(userId); // 回滚内存，避免未落盘的账户被误用
+      throw e;
+    }
   } else if (acc.plan !== "free" && acc.expiresAt && new Date(acc.expiresAt).getTime() <= Date.now()) {
     // Pro 已到期：自动降级 free 并保留额度记录
     acc.plan = "free";
     acc.planSince = null;
     acc.planSource = null;
     acc.expiresAt = null;
-    persist();
+    try {
+      persistSafe();
+    } catch (e) {
+      // 降级失败不致命：内存已降级，下次请求重试落盘
+      console.error("[billing] 到期降级落盘失败：", e);
+    }
   }
   return acc;
 }
@@ -129,11 +156,20 @@ export function consumeQuota(userId: string): QuotaResult {
   const remaining = limit === Infinity ? Infinity : Math.max(0, limit - used);
 
   if (limit !== Infinity && used >= limit) {
-    persist();
+    try {
+      persistSafe();
+    } catch (e) {
+      throw e;
+    }
     return { ok: false, plan: acc.plan, used, limit, remaining: 0, reason: "QUOTA_EXCEEDED" };
   }
   acc.quota.used += 1;
-  persist();
+  try {
+    persistSafe();
+  } catch (e) {
+    acc.quota.used -= 1; // 回滚：写入失败不消耗配额
+    throw e;
+  }
   return {
     ok: true,
     plan: acc.plan,
@@ -171,11 +207,21 @@ export function setPlan(
     acc = defaultAccount(userId);
     map.set(userId, acc);
   }
+  const prev = { plan: acc.plan, planSince: acc.planSince, planSource: acc.planSource, expiresAt: acc.expiresAt };
   acc.plan = plan;
   acc.planSince = plan === "free" ? null : new Date().toISOString();
   acc.planSource = plan === "free" ? null : source;
   acc.expiresAt = plan === "pro" ? expiresAt : null;
-  persist();
+  try {
+    persistSafe();
+  } catch (e) {
+    // 回滚内存变更
+    acc.plan = prev.plan;
+    acc.planSince = prev.planSince;
+    acc.planSource = prev.planSource;
+    acc.expiresAt = prev.expiresAt;
+    throw e;
+  }
   return acc;
 }
 

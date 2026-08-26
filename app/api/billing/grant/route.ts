@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BILLING_ADMIN_SECRET, PLAN } from "@/lib/billing";
-import { setPlan } from "@/lib/billing-store";
+import { setPlan, BillingStoreError } from "@/lib/billing-store";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +38,13 @@ export async function POST(req: NextRequest) {
     plan === PLAN.PRO && typeof o.durationDays === "number" && o.durationDays > 0
       ? new Date(Date.now() + o.durationDays * 86_400_000).toISOString()
       : null;
-  const acc = setPlan(key, plan, "grant", expiresAt);
-  return NextResponse.json({ ok: true, account: acc });
+  try {
+    const acc = setPlan(key, plan, "grant", expiresAt);
+    return NextResponse.json({ ok: true, account: acc });
+  } catch (e) {
+    if (e instanceof BillingStoreError) {
+      return NextResponse.json({ code: "BILLING_UNAVAILABLE", error: "计费服务暂不可用" }, { status: 503 });
+    }
+    throw e;
+  }
 }

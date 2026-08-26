@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AUTH_ORIGIN, type SessionUser } from "@/lib/auth";
-import { accountKey, getAccount, peekQuota } from "@/lib/billing-store";
+import { accountKey, getAccount, peekQuota, BillingStoreError } from "@/lib/billing-store";
 import { PLANS } from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
@@ -30,8 +30,16 @@ export async function GET(req: NextRequest) {
   const fwd = req.headers.get("x-forwarded-for");
   const ip = (fwd ? fwd.split(",")[0]?.trim() : null) || req.headers.get("x-real-ip") || "unknown";
   const key = accountKey(user, ip);
-  const acc = getAccount(key);
-  const quota = peekQuota(key);
+  let acc, quota;
+  try {
+    acc = getAccount(key);
+    quota = peekQuota(key);
+  } catch (e) {
+    if (e instanceof BillingStoreError) {
+      return NextResponse.json({ code: "BILLING_UNAVAILABLE", error: "计费服务暂不可用" }, { status: 503 });
+    }
+    throw e;
+  }
   const def = PLANS[acc.plan];
 
   return NextResponse.json({

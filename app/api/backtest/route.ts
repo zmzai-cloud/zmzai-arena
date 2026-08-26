@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AUTH_ORIGIN, type SessionUser } from "@/lib/auth";
 import { MARKET_DAYS, GLOBAL_SEED, type BacktestInput } from "@/lib/backtest-assemble";
 import { runBacktest } from "@/lib/sandbox-backtest";
-import { accountKey, consumeQuota, peekQuota } from "@/lib/billing-store";
+import { accountKey, consumeQuota, peekQuota, BillingStoreError } from "@/lib/billing-store";
 import { PLANS } from "@/lib/billing";
 import { INSTRUMENT_MAP } from "@/sim/market";
 import { STRATEGIES, type StyleKey, type StrategyConfig } from "@/sim/strategies";
@@ -137,7 +137,15 @@ export async function POST(req: NextRequest) {
   const key = accountKey(user, ip);
 
   // 计划权益校验：回测周期不能超过当前计划上限（Pro 500 交易日 / Free 120）
-  const plan = PLANS[peekQuota(key).plan];
+  let plan;
+  try {
+    plan = PLANS[peekQuota(key).plan];
+  } catch (e) {
+    if (e instanceof BillingStoreError) {
+      return NextResponse.json({ code: "BILLING_UNAVAILABLE", error: "计费服务暂不可用，请稍后再试" }, { status: 503 });
+    }
+    throw e;
+  }
   if (s.simDays > plan.maxSimDays) {
     return NextResponse.json(
       {
@@ -151,7 +159,15 @@ export async function POST(req: NextRequest) {
   }
 
   // 配额消费：通过校验后扣减（沙箱与本地降级均消耗算力资源）
-  const quota = consumeQuota(key);
+  let quota;
+  try {
+    quota = consumeQuota(key);
+  } catch (e) {
+    if (e instanceof BillingStoreError) {
+      return NextResponse.json({ code: "BILLING_UNAVAILABLE", error: "计费服务暂不可用，请稍后再试" }, { status: 503 });
+    }
+    throw e;
+  }
   if (!quota.ok) {
     return NextResponse.json(
       {
