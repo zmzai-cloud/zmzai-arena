@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { agents, STRESS_SCENARIOS, type Agent } from "@/data/agents";
-import { fmtPct, riskColor, tierBadge, tierDesc } from "@/lib/format";
+import { fmtPct, riskColor, tierBadge, tierDesc, engineBadge } from "@/lib/format";
 import { computeIntegrityHash } from "@/lib/integrity";
 import { useIsFollowed, toggleFollow } from "@/lib/follows";
 import type { StressStatus } from "@/sim/stress";
@@ -291,6 +291,11 @@ export function AgentDetail({ agent }: { agent: Agent }) {
               <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${tb.className}`}>
                 {tb.label}
               </span>
+              {agent.engine === "sandbox" && (
+                <span className="ml-1 rounded-md bg-accent/10 px-2 py-0.5 text-[11px] font-bold text-accent">
+                  {engineBadge(agent.engine)}
+                </span>
+              )}
               <div className="mt-3">
                 <b>说明：</b>
                 {tierDesc[agent.tier]}
@@ -298,6 +303,12 @@ export function AgentDetail({ agent }: { agent: Agent }) {
               <div className="mt-1">
                 <b>反前瞻：</b>策略仅可访问≤当前时间的行情，杜绝偷看未来。
               </div>
+              {agent.engine === "sandbox" && (
+                <div className="mt-1">
+                  <b>回测环境：</b>策略在 zmzai-sandbox 隔离沙箱中执行，成交含手续费 / 滑点 / 涨跌停约束，
+                  结果可复现、可审计{agent.sandboxRunId ? `（Run ${agent.sandboxRunId}）` : ""}。
+                </div>
+              )}
             </div>
             <button
               className="mt-3.5 w-full rounded-lg border border-line bg-surface py-2.5 text-[13px] font-semibold"

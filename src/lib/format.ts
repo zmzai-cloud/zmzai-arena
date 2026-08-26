@@ -1,4 +1,4 @@
-import type { Tier } from "@/data/agents";
+import type { Agent, Tier } from "@/data/agents";
 
 export const fmtPct = (v: number): string => (v >= 0 ? "+" : "") + v.toFixed(1) + "%";
 
@@ -29,4 +29,9 @@ export const tierDesc: Record<Tier, string> = {
   Forward: "前向测试，模拟盘实时运行",
   Backtest: "历史回测，已在隔离数据上验证",
   Paper: "模拟盘，策略验证阶段",
+};
+
+// 回测执行环境徽章：sandbox = zmzai-sandbox 隔离沙箱真实回测（含撮合成本）
+export const engineBadge = (engine: Agent["engine"]): string => {
+  return engine === "sandbox" ? "Sandbox 沙箱回测" : "本地仿真";
 };

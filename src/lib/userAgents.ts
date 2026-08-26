@@ -13,6 +13,7 @@ import { certifyRobustness, type RobustnessCert } from "@/sim/robustness";
 import { computeIntegrityHash } from "@/lib/integrity";
 import { type Agent, type Decision, market, agents as STATIC_AGENTS } from "@/data/agents";
 import { type StrategyConfig, type StyleKey } from "@/sim/strategies";
+import type { Metrics } from "@/sim/metrics";
 
 // ---------- 表单可选配置 ----------
 
@@ -112,6 +113,57 @@ function buildStress(id: number, simDays: number, seed: number, cfg: StrategyCon
 
 // ---------- 核心：由表单输入创建一个智能体 ----------
 
+/** 回测结果的统一契约（本地引擎 / 沙箱返回同构） */
+interface BacktestParts {
+  metrics: Metrics;
+  positions: Agent["positions"];
+  decisions: RawDecision[];
+  attribution: Attribution;
+  robustness: RobustnessCert;
+  stress: Record<string, AgentStress>;
+}
+
+/** 由回测产物组装 Agent（本地与沙箱路径共用，保证字段口径一致） */
+function assembleAgent(input: CreateAgentInput, creator: string, id: number, simDays: number, seed: number, parts: BacktestParts, engine: Agent["engine"], sandboxRunId?: string): Agent {
+  const style = input.style;
+  const universe = input.universe.filter((c) => INSTRUMENT_MAP[c]);
+  const marketLabel = universe.length ? INSTRUMENT_MAP[universe[0]]?.market ?? "A股" : "A股";
+
+  const a: Agent = {
+    id,
+    emoji: input.emoji || "🤖",
+    name: input.name.trim() || "无名策略",
+    persona: input.persona.trim() || `${STYLE_LABELS[style]}派`,
+    creator: creator || "我",
+    market: marketLabel,
+    style: STYLE_LABELS[style],
+    tier: "Paper",
+    totalReturn: parts.metrics.totalReturn,
+    maxDD: parts.metrics.maxDD,
+    sharpe: parts.metrics.sharpe,
+    riskScore: parts.metrics.riskScore,
+    riskBreakdown: parts.metrics.riskBreakdown,
+    attribution: parts.attribution,
+    robustness: parts.robustness,
+    integrityHash: "",
+    days: simDays,
+    followers: 0,
+    slogan: input.slogan?.trim() || `${input.name} · 用户策略`,
+    verified: false,
+    prompt: input.prompt,
+    guard: `风控规则：单笔 ≤ ${pct(input.maxSingle)} NAV；强制 ≥ ${pct(
+      input.minCash
+    )} 现金；回撤 > ${pct(input.stopDD)} 自动减仓。`,
+    positions: parts.positions,
+    log: parts.decisions.map((r) => toDecision(r, simDays)).slice(-12),
+    stress: parts.stress,
+    engine,
+    ...(sandboxRunId ? { sandboxRunId } : {}),
+  };
+  a.integrityHash = computeIntegrityHash(a);
+  return a;
+}
+
 export function createUserAgent(input: CreateAgentInput, creator: string): Agent {
   const id = Date.now();
   const style = input.style;
@@ -133,39 +185,77 @@ export function createUserAgent(input: CreateAgentInput, creator: string): Agent
 
   const res = runSimulation(cfg, market, simDays, seed, "Paper" as SimTier);
   const stress = buildStress(id, simDays, seed, cfg);
-  const marketLabel = universe.length ? INSTRUMENT_MAP[universe[0]]?.market ?? "A股" : "A股";
 
-  const a: Agent = {
-    id,
-    emoji: input.emoji || "🤖",
-    name: input.name.trim() || "无名策略",
-    persona: input.persona.trim() || `${STYLE_LABELS[style]}派`,
-    creator: creator || "我",
-    market: marketLabel,
-    style: STYLE_LABELS[style],
-    tier: "Paper",
-    totalReturn: res.metrics.totalReturn,
-    maxDD: res.metrics.maxDD,
-    sharpe: res.metrics.sharpe,
-    riskScore: res.metrics.riskScore,
-    riskBreakdown: res.metrics.riskBreakdown,
+  return assembleAgent(input, creator, id, simDays, seed, {
+    metrics: res.metrics,
+    positions: res.positions,
+    decisions: res.decisions,
     attribution: attributeReturn(res, market, cfg, simDays, "Paper", seed),
     robustness: certifyRobustness(market, cfg, simDays, "Paper", seed),
-    integrityHash: "",
-    days: simDays,
-    followers: 0,
-    slogan: input.slogan?.trim() || `${input.name} · 用户策略`,
-    verified: false,
-    prompt: input.prompt,
-    guard: `风控规则：单笔 ≤ ${pct(input.maxSingle)} NAV；强制 ≥ ${pct(
-      input.minCash
-    )} 现金；回撤 > ${pct(input.stopDD)} 自动减仓。`,
-    positions: res.positions,
-    log: res.decisions.map((r) => toDecision(r, simDays)).slice(-12),
     stress,
+  }, "local");
+}
+
+// ---------- 沙箱回测创建（优先）：提交 zmzai-sandbox 真实回测，失败自动降级本地 ----------
+
+interface BacktestApiResponse {
+  engine: "sandbox" | "local";
+  runId: string | null;
+  note: string | null;
+  result: {
+    metrics: Metrics;
+    positions: Agent["positions"];
+    decisions: RawDecision[];
+    attribution: Attribution;
+    robustness: RobustnessCert;
+    stress: Record<string, AgentStress>;
   };
-  a.integrityHash = computeIntegrityHash(a);
-  return a;
+}
+
+/**
+ * 调用服务端 /api/backtest：优先 zmzai-sandbox 隔离沙箱真实回测（含撮合成本），
+ * 服务端已内置失败降级，此处仅做网络层兜底（接口不可达时退回本地引擎）。
+ */
+export async function createUserAgentRemote(input: CreateAgentInput, creator: string): Promise<Agent> {
+  const id = Date.now();
+  const style = input.style;
+  const universe = input.universe.filter((c) => INSTRUMENT_MAP[c]);
+  const simDays = STYLE_SIMDAYS[style];
+  const seed = 20260825 + (id % 100000) + Math.floor(Math.random() * 100000);
+
+  const cfg: StrategyConfig = {
+    id,
+    style,
+    universe,
+    maxSingle: input.maxSingle,
+    minCash: input.minCash,
+    maxPositions: Math.max(1, Math.min(6, universe.length)),
+    stopDD: input.stopDD,
+    rebalance: Math.max(1, Math.round(input.rebalance)),
+    aggr: STYLE_AGGR[style],
+  };
+
+  try {
+    const res = await fetch("/api/backtest", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cfg, simDays, seed }),
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`回测接口 HTTP ${res.status}`);
+    const data = (await res.json()) as BacktestApiResponse;
+    return assembleAgent(input, creator, id, simDays, seed, {
+      metrics: data.result.metrics,
+      positions: data.result.positions,
+      decisions: data.result.decisions,
+      attribution: data.result.attribution,
+      robustness: data.result.robustness,
+      stress: data.result.stress,
+    }, data.engine, data.runId ?? undefined);
+  } catch (err) {
+    console.error("[arena] 沙箱回测不可用，降级本地引擎：", err);
+    return createUserAgent(input, creator);
+  }
 }
 
 // ---------- localStorage 持久化 ----------

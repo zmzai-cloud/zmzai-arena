@@ -5,7 +5,7 @@ import Link from "next/link";
 import { agents as STATIC_AGENTS, type Agent } from "@/data/agents";
 import { loadUserAgents } from "@/lib/userAgents";
 import { useIsFollowed, toggleFollow } from "@/lib/follows";
-import { fmtPct, riskColor, tierBadge } from "@/lib/format";
+import { fmtPct, riskColor, tierBadge, engineBadge } from "@/lib/format";
 import type { RobustnessLabel } from "@/sim/robustness";
 
 type SortKey = "totalReturn" | "maxDD" | "sharpe" | "riskScore";
@@ -118,10 +118,15 @@ function Row({ a, rank }: { a: Agent; rank: number }) {
           {a.market}
         </span>
         <span className="ml-1 text-ink-2">· {a.style}</span>
-        <div className="mt-1">
+        <div className="mt-1 flex flex-wrap items-center gap-1">
           <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${tb.className}`}>
             {tb.label}
           </span>
+          {a.engine === "sandbox" && (
+            <span className="rounded-md bg-accent/10 px-2 py-0.5 text-[11px] font-bold text-accent">
+              {engineBadge(a.engine)}
+            </span>
+          )}
         </div>
       </td>
       <td className={`px-3.5 py-3 font-bold ${a.totalReturn >= 0 ? "up" : "down"}`}>

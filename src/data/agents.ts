@@ -63,6 +63,8 @@ export interface Agent {
   positions: Position[];
   log: Decision[];
   stress: Record<string, AgentStress>; // 黑天鹅压力测试：每场景受压结果（key=scenarioId）
+  engine?: "sandbox" | "local"; // 回测执行环境：sandbox=zmzai-sandbox 隔离沙箱真实回测；local/缺省=浏览器或服务端本地引擎
+  sandboxRunId?: string; // 沙箱回测的运行 ID（可追溯审计）
 }
 
 // 全市场行情只生成一次（确定性种子），所有智能体共用同一段可复现行情

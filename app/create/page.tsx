@@ -6,7 +6,7 @@ import {
   INSTRUMENT_OPTIONS,
   STYLE_OPTIONS,
   STYLE_LABELS,
-  createUserAgent,
+  createUserAgentRemote,
   saveUserAgent,
   type CreateAgentInput,
 } from "@/lib/userAgents";
@@ -30,6 +30,7 @@ export default function CreatePage() {
   const [slogan, setSlogan] = useState("");
   const [creator, setCreator] = useState("我");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     fetch("/api/me")
@@ -50,7 +51,7 @@ export default function CreatePage() {
   const toggleCode = (code: string) =>
     setUniverse((u) => (u.includes(code) ? u.filter((c) => c !== code) : [...u, code]));
 
-  const submit = () => {
+  const submit = async () => {
     if (!name.trim()) return setError("请填写智能体名称");
     if (!prompt.trim()) return setError("请填写策略逻辑（Prompt）");
     if (universe.length === 0) return setError("请至少选择 1 个交易标的");
@@ -68,9 +69,17 @@ export default function CreatePage() {
       prompt,
       slogan,
     };
-    const agent = createUserAgent(input, creator);
-    saveUserAgent(agent);
-    router.push(`/agents/${agent.id}`);
+    setSubmitting(true);
+    setError("");
+    try {
+      // 优先走 zmzai-sandbox 隔离沙箱真实回测（含撮合成本），失败自动降级本地引擎
+      const agent = await createUserAgentRemote(input, creator);
+      saveUserAgent(agent);
+      router.push(`/agents/${agent.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "回测失败，请重试");
+      setSubmitting(false);
+    }
   };
 
   const fieldCls =
@@ -196,9 +205,10 @@ export default function CreatePage() {
 
           <button
             onClick={submit}
-            className="mt-1 rounded-lg bg-accent px-5 py-3 text-[15px] font-extrabold text-accent-ink"
+            disabled={submitting}
+            className="mt-1 rounded-lg bg-accent px-5 py-3 text-[15px] font-extrabold text-accent-ink disabled:opacity-60"
           >
-            上架竞技场 →
+            {submitting ? "沙箱回测中…" : "上架竞技场 →"}
           </button>
         </div>
 
@@ -217,7 +227,7 @@ export default function CreatePage() {
           <div className="mt-4 rounded-lg bg-surface-2 p-3 text-[12.5px] leading-relaxed text-ink-2">
             <div><b>风控护栏：</b>单笔 ≤ {maxSingle}% NAV；强制 ≥ {minCash}% 现金；回撤 &gt; {stopDD}% 自动减仓。</div>
             <div className="mt-2"><b>调仓：</b>每 {rebalance} 天；标的池 {universe.length} 只。</div>
-            <div className="mt-2 text-ink-3">提交后引擎将用统一行情跑出持仓 / 决策日志 / 夏普，并叠加黑天鹅压力测试。</div>
+            <div className="mt-2 text-ink-3">提交后将提交至 zmzai-sandbox 隔离沙箱做真实回测（含撮合成本），并叠加黑天鹅压力测试。</div>
           </div>
           <p className="mt-4 text-[11.5px] text-ink-2">数据为模拟演示，仅用于产品原型展示</p>
         </div>

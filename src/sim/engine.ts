@@ -33,6 +33,33 @@ export interface SimResult {
 
 const NAV0 = 1_000_000;
 
+// ---------- 撮合层（真实成本与约束） ----------
+// 成交不是"收盘价直接成交"，而是带手续费 / 滑点 / 涨跌停约束的撮合：
+// - 手续费：按市场差异化单边费率，买卖双向收取（金额 = 成交额 × 费率）
+// - 滑点：买入按信号价 ×(1+滑点) 成交，卖出按 ×(1-滑点) 成交
+// - 涨跌停（仅 A 股）：日内涨跌幅超 ±9.9% 视为封板，无法成交 → 订单 REJECT 并留痕
+// 这些成本会真实影响净值 / 指标 / 归因，使回测更接近实盘口径。
+
+const FEE_RATE: Record<string, number> = { A股: 0.00025, 港股: 0.00025, 美股: 0.00025, 加密: 0.0005 };
+const SLIP_RATE: Record<string, number> = { A股: 0.001, 港股: 0.001, 美股: 0.001, 加密: 0.002 };
+const CN_LIMIT = 0.099; // A 股日内涨跌幅 ±9.9% 视为封板
+
+function marketKindOf(code: string): string {
+  return INSTRUMENT_MAP[code]?.market ?? "A股";
+}
+
+/** 涨跌停判定（仅 A 股）：返回 "UP" | "DOWN" | null */
+function limitStatus(market: PriceSeries, code: string, day: number): "UP" | "DOWN" | null {
+  if (marketKindOf(code) !== "A股" || day < 1) return null;
+  const prev = market[code]?.[day - 1]?.close;
+  const cur = market[code]?.[day]?.close;
+  if (!prev || !cur) return null;
+  const chg = cur / prev - 1;
+  if (chg >= CN_LIMIT) return "UP";
+  if (chg <= -CN_LIMIT) return "DOWN";
+  return null;
+}
+
 export function runSimulation(
   cfg: StrategyConfig,
   market: PriceSeries,
@@ -53,29 +80,42 @@ export function runSimulation(
 
   for (let day = 1; day < simDays; day++) {
 
-    // 1) 回撤止损（护栏）
+    // 1) 回撤止损（护栏）——卖出同样走撮合（滑点 + 手续费）
     for (const [code, h] of [...holdings]) {
       const p = priceAt(market, code, day);
         const dd = p / h.cost - 1;
       if (dd <= -cfg.stopDD) {
-        cash += h.qty * p;
+        if (limitStatus(market, code, day) === "DOWN") {
+          decisions.push(mk(day, "REJECT", code, p, undefined, `${INSTRUMENT_MAP[code]?.name ?? code} 跌停无法卖出，止损挂单顺延`, "风控"));
+          continue;
+        }
+        const exec = p * (1 - slipOf(code));
+        const fee = h.qty * exec * feeOf(code);
+        cash += h.qty * exec - fee;
         holdings.delete(code);
-        decisions.push(mk(day, "SELL", code, p, h.qty, `回撤触及 ${(cfg.stopDD * 100).toFixed(0)}% 止损线，${INSTRUMENT_MAP[code]?.name ?? code} 清仓离场`, "策略"));
+        decisions.push(mk(day, "SELL", code, exec, h.qty, `回撤触及 ${(cfg.stopDD * 100).toFixed(0)}% 止损线，${INSTRUMENT_MAP[code]?.name ?? code} 清仓离场（含手续费与滑点）`, "策略"));
       }
     }
 
     // 2) 风格信号 → 提案
     const proposals = styleSignals(cfg, market, holdings, day, gridState);
 
-    // 3) 护栏执行
+    // 3) 护栏执行（含撮合：滑点成交 + 手续费 + 涨跌停约束）
     let tradedToday = false;
     for (const prop of proposals) {
       if (prop.side === "SELL") {
         const h = holdings.get(prop.code);
         if (h) {
-          cash += h.qty * prop.price;
+          if (limitStatus(market, prop.code, day) === "DOWN") {
+            decisions.push(mk(day, "REJECT", prop.code, prop.price, undefined, `${INSTRUMENT_MAP[prop.code]?.name ?? prop.code} 跌停无法卖出，${prop.reason}`, "风控"));
+            tradedToday = true;
+            continue;
+          }
+          const exec = prop.price * (1 - slipOf(prop.code));
+          const fee = h.qty * exec * feeOf(prop.code);
+          cash += h.qty * exec - fee;
           holdings.delete(prop.code);
-          decisions.push(mk(day, "SELL", prop.code, prop.price, h.qty, prop.reason, "策略"));
+          decisions.push(mk(day, "SELL", prop.code, exec, h.qty, prop.reason, "策略"));
           tradedToday = true;
         }
         continue;
@@ -89,22 +129,30 @@ export function runSimulation(
         decisions.push(mk(day, "REJECT", prop.code, prop.price, undefined, `买入 ${nm} 被拒：金额超出单笔 ${(cfg.maxSingle * 100).toFixed(0)}% NAV 上限`, "风控"));
         continue;
       }
+      if (limitStatus(market, prop.code, day) === "UP") {
+        decisions.push(mk(day, "REJECT", prop.code, prop.price, undefined, `买入 ${nm} 被拒：涨停封板无法成交`, "风控"));
+        continue;
+      }
       const affordable = cash - cfg.minCash * navB;
       if (affordable <= 0) {
         continue; // 现金不足以维持保留下限，静默跳过（不重复记 REJECT）
       }
+      // 撮合：按滑点后的成交价计算可买数量
+      const exec = prop.price * (1 + slipOf(prop.code));
       const notional = Math.min(desired, affordable);
-      const qty = roundLot(prop.code, notional / prop.price);
+      const qty = roundLot(prop.code, notional / exec);
       if (qty <= 0) continue;
-      cash -= qty * prop.price;
+      const fee = qty * exec * feeOf(prop.code);
+      if (qty * exec + fee > cash) continue;
+      cash -= qty * exec + fee;
       const prev = holdings.get(prop.code);
       if (prev) {
         const totQ = prev.qty + qty;
-        holdings.set(prop.code, { qty: totQ, cost: (prev.cost * prev.qty + prop.price * qty) / totQ });
+        holdings.set(prop.code, { qty: totQ, cost: (prev.cost * prev.qty + exec * qty + fee) / totQ });
       } else {
-        holdings.set(prop.code, { qty, cost: prop.price });
+        holdings.set(prop.code, { qty, cost: exec + fee / qty });
       }
-      decisions.push(mk(day, "BUY", prop.code, prop.price, qty, prop.reason, prop.source));
+      decisions.push(mk(day, "BUY", prop.code, exec, qty, prop.reason, prop.source));
       tradedToday = true;
     }
 
@@ -278,6 +326,14 @@ function buildPositions(market: PriceSeries, holdings: Map<string, Holding>, day
   });
   arr.sort((a, b) => Number(b.mv.replace(/[^\d.]/g, "")) - Number(a.mv.replace(/[^\d.]/g, "")));
   return arr;
+}
+
+function feeOf(code: string): number {
+  return FEE_RATE[marketKindOf(code)] ?? 0.00025;
+}
+
+function slipOf(code: string): number {
+  return SLIP_RATE[marketKindOf(code)] ?? 0.001;
 }
 
 function priceAt(market: PriceSeries, code: string, day: number): number {

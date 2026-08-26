@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { type Agent } from "@/data/agents";
 import { loadUserAgents, deleteUserAgent } from "@/lib/userAgents";
-import { fmtPct } from "@/lib/format";
+import { fmtPct, engineBadge } from "@/lib/format";
 
 export function MyUserAgents() {
   const [list, setList] = useState<Agent[]>([]);
@@ -38,6 +38,11 @@ export function MyUserAgents() {
               <Link href={`/agents/${a.id}`} className="font-bold hover:text-accent">
                 {a.name}
               </Link>
+              {a.engine === "sandbox" && (
+                <span className="ml-1.5 rounded-md bg-accent/10 px-1.5 py-0.5 text-[10.5px] font-bold text-accent">
+                  {engineBadge(a.engine)}
+                </span>
+              )}
               <div className="text-[12px] text-ink-2">
                 {a.style} · 总收益 <span className={a.totalReturn >= 0 ? "up" : "down"}>{fmtPct(a.totalReturn)}</span> · 夏普{" "}
                 {a.sharpe.toFixed(2)} · 风险分 {a.riskScore}
