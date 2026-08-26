@@ -6,6 +6,7 @@ import { agents as STATIC_AGENTS, type Agent } from "@/data/agents";
 import { loadUserAgents } from "@/lib/userAgents";
 import { useIsFollowed, toggleFollow } from "@/lib/follows";
 import { fmtPct, riskColor, tierBadge } from "@/lib/format";
+import type { RobustnessLabel } from "@/sim/robustness";
 
 type SortKey = "totalReturn" | "maxDD" | "sharpe" | "riskScore";
 
@@ -74,6 +75,7 @@ export function Leaderboard() {
               <th className="cursor-pointer px-3.5 py-3 text-left font-bold" onClick={() => toggleSort("riskScore")}>
                 风险分{arrow("riskScore")}
               </th>
+              <th className="px-3.5 py-3 text-left font-bold">稳健度</th>
               <th className="px-3.5 py-3 text-left font-bold">天数</th>
               <th className="px-3.5 py-3 text-center font-bold">关注</th>
             </tr>
@@ -136,12 +138,24 @@ function Row({ a, rank }: { a: Agent; rank: number }) {
         </span>
         <span className="ml-2">{a.riskScore}</span>
       </td>
+      <td className="px-3.5 py-3">
+        <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${robCls(a.robustness.label)}`}>
+          {a.robustness.label}
+        </span>
+        <span className="ml-1.5 text-ink-2">{a.robustness.stabilityScore}</span>
+      </td>
       <td className="px-3.5 py-3 text-ink-2">{a.days || "—"}</td>
       <td className="px-3.5 py-3 text-center">
         <FollowStar id={a.id} />
       </td>
     </tr>
   );
+}
+
+function robCls(l: RobustnessLabel): string {
+  if (l === "稳健") return "bg-success/12 text-success";
+  if (l === "过拟合嫌疑") return "bg-danger/15 text-danger";
+  return "bg-warning/15 text-warning";
 }
 
 function FollowStar({ id }: { id: number }) {

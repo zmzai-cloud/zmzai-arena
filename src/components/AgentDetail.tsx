@@ -7,6 +7,7 @@ import { agents, STRESS_SCENARIOS, type Agent } from "@/data/agents";
 import { fmtPct, riskColor, tierBadge, tierDesc } from "@/lib/format";
 import { useIsFollowed, toggleFollow } from "@/lib/follows";
 import type { StressStatus } from "@/sim/stress";
+import type { RobustnessLabel } from "@/sim/robustness";
 
 export function AgentDetail({ agent }: { agent: Agent }) {
   const router = useRouter();
@@ -169,6 +170,61 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             </p>
           </Section>
 
+          <Section title="🔍 反过拟合认证">
+            <div className="flex items-center justify-between">
+              <span className={`rounded-md px-2.5 py-1 text-[12.5px] font-bold ${robCls(agent.robustness.label)}`}>
+                {agent.robustness.label}
+              </span>
+              <div className="text-right">
+                <div className="text-[22px] font-extrabold" style={{ color: riskColor(agent.robustness.stabilityScore) }}>
+                  {agent.robustness.stabilityScore}
+                </div>
+                <div className="text-[11px] text-ink-2">稳健度 / 100</div>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2.5 text-[12.5px]">
+              <Mini label="跨行情胜率" value={`${(agent.robustness.winRate * 100).toFixed(0)}%`} />
+              <Mini label="基准分位" value={`${agent.robustness.percentile}%`} />
+              <Mini label="对照均值" value={fmtPct(agent.robustness.meanReturn)} />
+              <Mini label="对照波动" value={fmtPct(agent.robustness.stdReturn)} />
+            </div>
+
+            <div className="mt-3 flex h-16 items-end gap-1">
+              {agent.robustness.altReturns.map((r, i) => {
+                const maxAbs = Math.max(1, ...agent.robustness.altReturns.map(Math.abs));
+                const isBase = i === 0;
+                return (
+                  <div
+                    key={i}
+                    title={`${r >= 0 ? "+" : ""}${r.toFixed(1)}%`}
+                    className="flex-1 rounded-sm"
+                    style={{
+                      height: `${Math.min(100, (Math.abs(r) / maxAbs) * 100)}%`,
+                      background: isBase
+                        ? "var(--color-accent)"
+                        : r >= 0
+                          ? "var(--color-success)"
+                          : "var(--color-danger)",
+                      opacity: isBase ? 1 : 0.75,
+                    }}
+                  />
+                );
+              })}
+            </div>
+            <div className="mt-1 flex justify-between text-[10.5px] text-ink-3">
+              <span>① 榜单行情</span>
+              <span>
+                ②–{agent.robustness.altReturns.length} 对照随机行情（{agent.robustness.runs - 1} 条）
+              </span>
+            </div>
+
+            <p className="mt-2 text-[11.5px] leading-relaxed text-ink-3">{agent.robustness.note}</p>
+            <p className="mt-1 text-[11px] text-ink-3">
+              认证方法：同一策略在 {agent.robustness.runs - 1} 条独立随机行情下重跑，统计胜率与基准分位，判断榜单收益是否可复现。
+            </p>
+          </Section>
+
           <Section title="💼 实时持仓">
             <table className="w-full text-[13px]">
               <thead>
@@ -305,4 +361,24 @@ function stressCls(s: StressStatus): string {
     case "爆仓":
       return "bg-danger text-white";
   }
+}
+
+function robCls(l: RobustnessLabel): string {
+  switch (l) {
+    case "稳健":
+      return "bg-success/12 text-success";
+    case "过拟合嫌疑":
+      return "bg-danger/15 text-danger";
+    default:
+      return "bg-warning/15 text-warning";
+  }
+}
+
+function Mini({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-line bg-surface-2 px-3 py-2">
+      <div className="text-[11px] text-ink-2">{label}</div>
+      <div className="mt-0.5 font-bold">{value}</div>
+    </div>
+  );
 }
