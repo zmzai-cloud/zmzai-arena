@@ -4,12 +4,31 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Navbar, navItemClass } from "@zmzai/theme/components/navbar";
-import { loginUrl, logoutUrl, type SessionUser } from "@/lib/auth";
+import { AUTH_ORIGIN, loginUrl, type SessionUser } from "@/lib/auth";
 
 // 全域统一顶栏：Logo + Wordmark（ZMZAI · trader-arena），与其他 7 站同源
 export function Nav() {
   const pathname = usePathname();
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  // 登出：POST 到 SSO 中心销毁会话。跨域时即使 CORS 阻止读响应，Set-Cookie 清会话
+  // 仍由浏览器自动生效，随后跳回 auth 登录页（带 next 回跳）。
+  const doLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await fetch(`${AUTH_ORIGIN}/api/logout`, { method: "POST", credentials: "include" });
+    } catch {
+      // 静默：请求已发出，会话已销毁
+    }
+    const next = encodeURIComponent(
+      typeof window !== "undefined" && window.location.origin
+        ? window.location.origin + (pathname || "/")
+        : "/",
+    );
+    window.location.href = `${AUTH_ORIGIN}/login?next=${next}`;
+  };
 
   useEffect(() => {
     let alive = true;
@@ -34,9 +53,9 @@ export function Nav() {
               <Link href="/me" className={navItemClass(false)}>
                 {user.name}
               </Link>
-              <a href={logoutUrl(pathname)} className={navItemClass(false)}>
-                登出
-              </a>
+              <button onClick={doLogout} className={navItemClass(false)} disabled={loggingOut}>
+                {loggingOut ? "登出中…" : "登出"}
+              </button>
             </>
           ) : (
             <a href={loginUrl(pathname)} className={navItemClass(false)}>
