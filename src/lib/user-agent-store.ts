@@ -227,6 +227,11 @@ export function listUserAgents(userId: string): Agent[] {
   return [...(loadAll().get(userId) ?? [])];
 }
 
+/** 全部用户已上云策略（共识信号等聚合场景用；仅需字段子集时避免整仓拷贝） */
+export function listAllUserAgents(): Agent[] {
+  return [...loadAll().values()].flat();
+}
+
 /** 保存（按 id 覆盖）。超限抛 UserAgentStoreError；写失败回滚内存。 */
 export function saveUserAgentFor(userId: string, agent: Agent): void {
   const map = loadAll();

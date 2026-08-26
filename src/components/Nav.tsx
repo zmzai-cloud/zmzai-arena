@@ -61,6 +61,9 @@ export function Nav() {
       <Link href="/battle" className={navItemClass(pathname.startsWith("/battle"))}>
         对决
       </Link>
+      <Link href="/signals" className={navItemClass(pathname.startsWith("/signals"))}>
+        信号
+      </Link>
       <Link href="/create" className={navItemClass(pathname.startsWith("/create"))}>
         创建
       </Link>
