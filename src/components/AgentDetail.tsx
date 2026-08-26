@@ -10,7 +10,7 @@ import { computeIntegrityHash } from "@/lib/integrity";
 import { useIsFollowed, toggleFollow } from "@/lib/follows";
 import type { StressStatus } from "@/sim/stress";
 import type { RobustnessLabel } from "@/sim/robustness";
-import { medalsOf, loadSeasonSnapshots, MEDAL_LABEL, medalCls } from "@/lib/season";
+import { medalsOf, historyOf, loadSeasonSnapshots, MEDAL_LABEL, medalCls, leagueCls, LEAGUE_LABEL, leagueOf } from "@/lib/season";
 
 // 验证档案页：受众是投资小白，核心动作是「验证一个 Agent 再决定要不要跟」
 export function AgentDetail({ agent }: { agent: Agent }) {
@@ -36,11 +36,12 @@ export function AgentDetail({ agent }: { agent: Agent }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent.id]);
 
-  // 历史赛季徽章（已结算赛季的 TOP3 荣誉，跨月自动归档）
-  const [seasonMedals, setSeasonMedals] = useState<{ season: string; rank: number }[]>([]);
+  // 历史赛季轨迹（已结算赛季的名次 / 联赛 / 升降标记，跨月自动归档）
+  const [seasonHistory, setSeasonHistory] = useState<ReturnType<typeof historyOf>>([]);
   useEffect(() => {
-    setSeasonMedals(medalsOf(agent.id, loadSeasonSnapshots()));
+    setSeasonHistory(historyOf(agent.id, loadSeasonSnapshots()));
   }, [agent.id]);
+  const seasonMedals = seasonHistory.filter((h) => h.rank <= 3);
 
   // 跟投换算（小韭菜叙事）：初始投入 → 按策略总收益换算期末金额
   const [invest, setInvest] = useState(10000);
@@ -229,6 +230,45 @@ export function AgentDetail({ agent }: { agent: Agent }) {
         <Kpi v={String(agent.riskScore)} l="风险分 / 100" style={{ color: riskColor(agent.riskScore) }} />
         <Kpi v={`#${rank}`} l="竞技场排名" />
       </div>
+
+      {/* 赛季轨迹：联赛升降级 + 徽章历史（留存钩子） */}
+      {seasonHistory.length > 0 && (
+        <div className="mt-4 border border-line bg-surface p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[13px] font-bold">赛季轨迹</div>
+            <div className="text-[11px] text-ink-3">甲级 TOP10 · 乙级 11-20 · 丙级 21-30 · 跨赛季自动升降级</div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {seasonHistory.map((h) => (
+              <span
+                key={h.season}
+                title={`${h.season} 赛季第 ${h.rank} 名${h.promoted ? "（晋级）" : h.relegated ? "（降级）" : ""}`}
+                className="flex items-center gap-1.5 rounded border border-line bg-surface-2 px-2 py-1"
+              >
+                <span className="text-[11px] font-bold text-ink-2">{h.season}</span>
+                <span
+                  className={`num rounded px-1.5 py-px text-[10.5px] font-bold ${
+                    h.rank <= 3 ? medalCls(h.rank) : "bg-surface-2 text-ink-3"
+                  }`}
+                >
+                  #{h.rank}
+                </span>
+                <span
+                  className={`rounded px-1.5 py-px text-[10px] font-bold ${leagueCls(h.league ?? leagueOf(h.rank))}`}
+                >
+                  {LEAGUE_LABEL[h.league ?? leagueOf(h.rank)]}
+                </span>
+                {h.promoted && (
+                  <span className="rounded bg-accent/12 px-1 py-px text-[10px] font-bold text-accent">↑ 晋级</span>
+                )}
+                {h.relegated && (
+                  <span className="rounded bg-danger/12 px-1 py-px text-[10px] font-bold text-danger">↓ 降级</span>
+                )}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 跟投换算：把专业收益翻译成小韭菜的“钱变多少钱” */}
       <div className="mt-4 border border-line bg-surface p-4">

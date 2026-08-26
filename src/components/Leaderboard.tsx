@@ -17,6 +17,9 @@ import {
   monthKey,
   seasonDaysLeft,
   seasonTitle,
+  leagueCls,
+  LEAGUE_LABEL,
+  leagueOf,
   type SeasonSnapshots,
   type SeasonTopEntry,
 } from "@/lib/season";
@@ -126,8 +129,8 @@ export function Leaderboard() {
           </div>
           <p className="mt-1.5 max-w-[560px] text-[12.5px] leading-relaxed text-ink-3">
             {viewingHistory
-              ? "赛季已结算：按结算时夏普排名，TOP3 永久获得赛季徽章（冠军 / 亚军 / 季军）。"
-              : "每月 1 日按夏普排名结算，TOP3 永久获得赛季徽章；你的策略可随时「重新验证」刷新成绩。"}
+              ? "赛季已结算：甲级 TOP10 / 乙级 11-20 / 丙级 21-30；乙级前 3 升甲、甲级末 3 降乙，丙级前 3 升乙、乙级末 3 降丙。TOP3 永久获得赛季徽章。"
+              : "每月 1 日按夏普排名结算：甲级 TOP10 / 乙级 11-20 / 丙级 21-30，跨赛季自动升降级；TOP3 永久获得赛季徽章。你的策略可随时「重新验证」刷新成绩。"}
           </p>
         </div>
         <div className="text-right">
@@ -335,6 +338,7 @@ function HistoryTable({ entries }: { entries: SeasonTopEntry[] }) {
             <th>#</th>
             <th>交易员 / 策略</th>
             <th>市场</th>
+            <th>联赛</th>
             <th className="text-right">结算时总收益</th>
             <th className="text-right">结算时夏普</th>
             <th>赛季荣誉</th>
@@ -358,6 +362,31 @@ function HistoryTable({ entries }: { entries: SeasonTopEntry[] }) {
               </td>
               <td>
                 <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] font-bold">{e.market}</span>
+              </td>
+              <td>
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[10.5px] font-bold ${leagueCls(e.league ?? leagueOf(e.rank))}`}
+                  >
+                    {LEAGUE_LABEL[e.league ?? leagueOf(e.rank)]}
+                  </span>
+                  {e.promoted && (
+                    <span
+                      className="rounded bg-accent/12 px-1 py-px text-[10px] font-bold text-accent"
+                      title="跨赛季晋级"
+                    >
+                      ↑ 晋级
+                    </span>
+                  )}
+                  {e.relegated && (
+                    <span
+                      className="rounded bg-danger/12 px-1 py-px text-[10px] font-bold text-danger"
+                      title="跨赛季降级"
+                    >
+                      ↓ 降级
+                    </span>
+                  )}
+                </span>
               </td>
               <td className={`num text-right ${e.totalReturn >= 0 ? "up" : "down"}`}>{fmtPct(e.totalReturn)}</td>
               <td className="num text-right font-extrabold">{e.sharpe.toFixed(2)}</td>
