@@ -58,4 +58,64 @@
     background: var(--color-surface-2);
     overflow: hidden;
   }
+
+  /* 金融数据字号：等宽 + 表格数字对齐（JetBrains Mono） */
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 数据表格：紧凑行、细线、表头 mono 小字 */
+  .dtbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .dtbl th {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-ink-3);
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--color-line);
+    white-space: nowrap;
+  }
+  .dtbl td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--color-line);
+    vertical-align: middle;
+  }
+  .dtbl tbody tr {
+    transition: background-color var(--animate-dur-fast) var(--ease-out);
+  }
+  .dtbl tbody tr:hover {
+    background: var(--color-surface);
+  }
+  .dtbl tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  /* 终端式代码块（真实内容，非伪造浏览器 chrome） */
+  .term {
+    background: var(--color-dark-bg);
+    color: var(--color-dark-ink);
+    border: 1px solid var(--color-dark-line);
+    border-radius: var(--radius);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.7;
+    overflow-x: auto;
+  }
+  .term .ok {
+    color: var(--color-success);
+  }
+  .term .warn {
+    color: var(--color-warning);
+  }
+  .term .acc {
+    color: var(--color-accent);
+  }
 }

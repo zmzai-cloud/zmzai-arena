@@ -112,24 +112,24 @@ export function CreateForm({ forkId }: { forkId?: string }) {
   };
 
   const fieldCls =
-    "w-full rounded-lg border border-line bg-surface px-3 py-2 text-[14px] outline-none focus:border-accent";
+    "w-full rounded border border-line bg-surface px-3 py-2 text-[14px] outline-none focus:border-accent";
   const labelCls = "mb-1.5 block text-[13px] font-semibold text-ink-2";
 
   return (
     <section className="mt-8">
-      <h1 className="text-[22px] font-extrabold">创建你的智能体</h1>
+      <h1 className="text-[22px] font-extrabold">创建交易员</h1>
       <p className="mt-1 text-[13px] text-ink-2">
         写下策略 Prompt 与风控护栏，引擎会在与官方 Agent 相同的行情上跑出持仓 / 决策日志 / 指标，并上架竞技场接受检验。
       </p>
       {forked && (
-        <p className="mt-2 rounded-lg border border-accent/40 bg-accent/10 px-3.5 py-2 text-[12.5px] text-accent">
+        <p className="mt-2 border border-accent/40 bg-accent/10 px-3.5 py-2 text-[12.5px] text-accent">
           ⑂ 已预填「{forked}」的策略与标的（公开 Prompt 部分），风控护栏可按需调整。
         </p>
       )}
 
       <div className="mt-6 grid gap-5 lg:grid-cols-[1.3fr_1fr]">
         {/* 左：表单 */}
-        <div className="flex flex-col gap-5 rounded-2xl border border-line bg-surface p-6">
+        <div className="flex flex-col gap-5 border border-line bg-surface p-6">
           <div>
             <label className={labelCls}>头像</label>
             <div className="flex flex-wrap gap-2">
@@ -137,7 +137,7 @@ export function CreateForm({ forkId }: { forkId?: string }) {
                 <button
                   key={e}
                   onClick={() => setEmoji(e)}
-                  className={`flex h-10 w-10 items-center justify-center rounded-lg border text-[20px] ${
+                  className={`flex h-10 w-10 items-center justify-center rounded border text-[20px] ${
                     emoji === e ? "border-accent bg-accent/10" : "border-line bg-surface-2"
                   }`}
                 >
@@ -177,7 +177,7 @@ export function CreateForm({ forkId }: { forkId?: string }) {
 
           <div>
             <label className={labelCls}>交易标的（可多选）*</label>
-            <div className="max-h-52 overflow-y-auto rounded-lg border border-line bg-surface-2 p-3">
+            <div className="max-h-52 overflow-y-auto rounded border border-line bg-surface-2 p-3">
               {Object.entries(grouped).map(([mkt, list]) => (
                 <div key={mkt} className="mb-2 last:mb-0">
                   <div className="mb-1 text-[11.5px] font-bold text-ink-2">{mkt}</div>
@@ -235,22 +235,22 @@ export function CreateForm({ forkId }: { forkId?: string }) {
             <input className={fieldCls} value={slogan} onChange={(e) => setSlogan(e.target.value)} placeholder="如：追最强趋势，纪律执行" />
           </div>
 
-          {error && <div className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-[13px] text-danger">{error}</div>}
+          {error && <div className="border border-danger/40 bg-danger/10 px-3 py-2 text-[13px] text-danger">{error}</div>}
 
-          <button
-            onClick={submit}
-            disabled={submitting}
-            className="mt-1 rounded-lg bg-accent px-5 py-3 text-[15px] font-extrabold text-accent-ink disabled:opacity-60"
-          >
-            {submitting ? "沙箱回测中…" : "上架竞技场 →"}
-          </button>
+            <button
+              onClick={submit}
+              disabled={submitting}
+              className="mt-1 rounded bg-accent px-5 py-3 text-[15px] font-extrabold text-accent-ink disabled:opacity-60"
+            >
+              {submitting ? "沙箱回测中…" : "上架竞技场 →"}
+            </button>
         </div>
 
         {/* 右：实时预览 */}
-        <div className="h-fit rounded-2xl border border-line bg-surface p-6">
+        <div className="h-fit border border-line bg-surface p-6">
           <div className="text-[14px] font-bold">实时预览</div>
           <div className="mt-3 flex items-center gap-3">
-            <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-surface-2 text-[28px]">{emoji}</span>
+            <span className="flex h-14 w-14 items-center justify-center rounded bg-surface-2 text-[28px]">{emoji}</span>
             <div>
               <div className="text-[17px] font-extrabold">{name || "未命名智能体"}</div>
               <div className="text-[12px] text-ink-2">
@@ -258,7 +258,7 @@ export function CreateForm({ forkId }: { forkId?: string }) {
               </div>
             </div>
           </div>
-          <div className="mt-4 rounded-lg bg-surface-2 p-3 text-[12.5px] leading-relaxed text-ink-2">
+          <div className="mt-4 bg-surface-2 p-3 text-[12.5px] leading-relaxed text-ink-2">
             <div><b>风控护栏：</b>单笔 ≤ {maxSingle}% NAV；强制 ≥ {minCash}% 现金；回撤 &gt; {stopDD}% 自动减仓。</div>
             <div className="mt-2"><b>调仓：</b>每 {rebalance} 天；标的池 {universe.length} 只。</div>
             <div className="mt-2 text-ink-3">提交后将提交至 zmzai-sandbox 隔离沙箱做真实回测（含撮合成本），并叠加黑天鹅压力测试。</div>

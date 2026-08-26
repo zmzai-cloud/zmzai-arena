@@ -11,6 +11,7 @@ import { useIsFollowed, toggleFollow } from "@/lib/follows";
 import type { StressStatus } from "@/sim/stress";
 import type { RobustnessLabel } from "@/sim/robustness";
 
+// 验证档案页：受众是投资小白，核心动作是「验证一个 Agent 再决定要不要跟」
 export function AgentDetail({ agent }: { agent: Agent }) {
   const router = useRouter();
   const followed = useIsFollowed(agent.id);
@@ -21,6 +22,11 @@ export function AgentDetail({ agent }: { agent: Agent }) {
       .sort((a, b) => b.sharpe - a.sharpe)
       .findIndex((x) => x.id === agent.id) + 1;
   const attrScale = Math.max(1, ...agent.attribution.byBucket.map((b) => Math.abs(b.value)));
+
+  // 预期收益区间：全部来自真实引擎对照分布（robustness 认证的重跑样本），不编造
+  const r = agent.robustness;
+  const expLo = r.meanReturn - r.stdReturn;
+  const expHi = r.meanReturn + r.stdReturn;
 
   const [verified, setVerified] = useState<boolean | null>(null);
   const verify = () => setVerified(computeIntegrityHash(agent) === agent.integrityHash);
@@ -38,80 +44,145 @@ export function AgentDetail({ agent }: { agent: Agent }) {
         }}
         className="mt-5 font-semibold text-accent"
       >
-        ← 返回排行榜
+        ← 返回竞技场
       </button>
 
-      {/* header */}
-      <div className="mt-3 flex items-center gap-4 rounded-xl border border-line bg-surface p-5 shadow-sm">
-        <span className="flex h-16 w-16 flex-none items-center justify-center rounded-xl bg-surface-2 text-[34px]">
+      {/* 终端验证结论条（真实校验结果，非装饰） */}
+      <div className="term mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-[12px]">
+        <span className="acc">zmzai-arena$</span>
+        <span className="text-dark-ink/70">verify --id={agent.id} --engine={agent.engine ?? "local"}</span>
+        <span className="ok">✓ integrity {verified === null ? "…" : verified ? "MATCH" : "MISMATCH"}</span>
+        <span className="ok">✓ 反前瞻护栏</span>
+        <span className="ok">✓ 模拟盘 · 无真实资金</span>
+        <span className="warn">360 交易日</span>
+      </div>
+
+      {/* header：名称 + 操作（关注 / Fork 均为真实交互） */}
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-line pb-4">
+        <span className="flex h-12 w-12 flex-none items-center justify-center rounded bg-surface-2 text-[24px]">
           {agent.emoji}
         </span>
-        <div>
-          <h2 className="text-[21px] font-extrabold">
-            {agent.name} {agent.verified && <span className="text-accent">✔ 已验证</span>}
-          </h2>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-[22px] font-extrabold tracking-tight">{agent.name}</h1>
+            {agent.verified && (
+              <span className="num rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-bold text-accent">
+                ✓ VERIFIED
+              </span>
+            )}
+            <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-bold ${tb.className}`}>{tb.label}</span>
+            {agent.engine && (
+              <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-bold ${engineCls(agent.engine)}`}>
+                {engineBadge(agent.engine)}
+              </span>
+            )}
+          </div>
           <div className="mt-1 text-[13px] text-ink-2">
             by {agent.creator} · {agent.market} · {agent.style} · {agent.persona}
           </div>
         </div>
         <div className="ml-auto flex gap-2">
           <button
-            className={`rounded-lg border px-3 py-2 text-[13px] font-semibold ${
-              followed ? "border-accent bg-accent/10 text-accent" : "border-line bg-surface text-ink"
+            className={`rounded px-3.5 py-2 text-[13px] font-semibold transition-colors ${
+              followed
+                ? "border border-accent bg-accent/10 text-accent"
+                : "border border-line bg-surface text-ink hover:border-accent/50"
             }`}
             onClick={() => toggleFollow(agent.id)}
           >
-            {followed ? "✔ 已关注" : "+ 关注"} ({agent.followers + (followed ? 1 : 0)})
+            {followed ? "★ 已关注" : "☆ 关注"} · {agent.followers + (followed ? 1 : 0)}
           </button>
           <Link
             href={`/create?fork=${agent.id}`}
-            className="rounded-lg bg-accent px-3 py-2 text-[13px] font-semibold text-accent-ink"
+            className="rounded bg-accent px-3.5 py-2 text-[13px] font-semibold text-accent-ink"
           >
             ⑂ Fork 策略
           </Link>
         </div>
       </div>
 
-      {/* stats */}
-      <div className="mt-4 grid grid-cols-2 gap-3.5 sm:grid-cols-5">
-        <Stat v={fmtPct(agent.totalReturn)} l="总收益" cls={agent.totalReturn >= 0 ? "up" : "down"} />
-        <Stat v={fmtPct(agent.maxDD)} l="最大回撤" cls={agent.maxDD >= 0 ? "up" : "down"} />
-        <Stat v={agent.sharpe.toFixed(2)} l="夏普比率" />
-        <Stat
-          v={String(agent.riskScore)}
-          l="风险分 / 100"
-          style={{ color: riskColor(agent.riskScore) }}
-        />
-        <Stat v={`#${rank}`} l="竞技场排名" />
+      {/* KPI：细线网格 + mono 数字 */}
+      <div className="mt-4 grid grid-cols-2 divide-x divide-y divide-line border border-line sm:grid-cols-5">
+        <Kpi v={fmtPct(agent.totalReturn)} l="总收益" cls={agent.totalReturn >= 0 ? "up" : "down"} />
+        <Kpi v={fmtPct(agent.maxDD)} l="最大回撤" cls={agent.maxDD >= 0 ? "up" : "down"} />
+        <Kpi v={agent.sharpe.toFixed(2)} l="夏普比率" />
+        <Kpi v={String(agent.riskScore)} l="风险分 / 100" style={{ color: riskColor(agent.riskScore) }} />
+        <Kpi v={`#${rank}`} l="竞技场排名" />
       </div>
 
-      <div className="mt-1 grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr]">
+      {/* 预期收益区间（真实对照分布，68% 区间 + 全范围） */}
+      <div className="mt-4 border border-line bg-surface p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div className="text-[13px] font-bold">预期收益（对照 {r.runs - 1} 条独立随机行情重跑）</div>
+          <div className="num text-[11px] text-ink-3">DISTRIBUTION OF {r.runs - 1} ALTERNATE RUNS</div>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div>
+            <div className="text-[11px] text-ink-3">对照均值</div>
+            <div className={`num text-[22px] font-extrabold ${r.meanReturn >= 0 ? "up" : "down"}`}>
+              {fmtPct(r.meanReturn)}
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] text-ink-3">68% 区间（均值 ± 1σ）</div>
+            <div className="num text-[22px] font-extrabold">
+              <span className={expLo >= 0 ? "up" : "down"}>{fmtPct(expLo)}</span>
+              <span className="text-ink-3"> ~ </span>
+              <span className={expHi >= 0 ? "up" : "down"}>{fmtPct(expHi)}</span>
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] text-ink-3">全范围（min ~ max）</div>
+            <div className="num text-[15px] font-bold">
+              <span className={r.minReturn >= 0 ? "up" : "down"}>{fmtPct(r.minReturn)}</span>
+              <span className="text-ink-3"> ~ </span>
+              <span className={r.maxReturn >= 0 ? "up" : "down"}>{fmtPct(r.maxReturn)}</span>
+              <span className="ml-2 text-[11px] font-normal text-ink-3">
+                榜单 {fmtPct(r.baselineReturn)} 处于 {r.percentile}% 分位
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-surface-2" aria-hidden>
+          <div
+            className="h-full bg-success/70"
+            style={{
+              width: `${Math.max(2, ((r.meanReturn - r.minReturn) / Math.max(0.01, r.maxReturn - r.minReturn)) * 100)}%`,
+            }}
+          />
+          <i className="sr-only">对照收益分布区间示意</i>
+        </div>
+        <p className="mt-2 text-[11.5px] leading-relaxed text-ink-3">
+          同一策略在 {r.runs - 1} 条独立随机行情下重跑后的真实分布：约 68% 的场景收益落在均值 ± 1σ 区间内。
+          榜单成绩只是其中一个样本，请以区间而非单一数字判断预期。模拟业绩不代表未来真实收益。
+        </p>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr]">
         {/* left */}
         <div className="flex flex-col gap-4">
-          <Section title="⚙ 策略逻辑（公开 Prompt）">
-            <pre className="overflow-x-auto rounded-lg bg-dark-bg p-4 font-mono text-[12.5px] leading-relaxed text-dark-ink">
-              {agent.prompt}
-            </pre>
-            <div className="mt-3 rounded-lg border border-warning/40 bg-warning/10 px-3.5 py-2.5 text-[12.5px] text-warning">
+          <Section no="01" title="策略逻辑（公开 Prompt）">
+            <pre className="term p-4">{agent.prompt}</pre>
+            <div className="mt-3 border border-warning/40 bg-warning/10 px-3.5 py-2.5 text-[12.5px] text-warning">
               <b>⚠ 风控护栏：</b>
               {agent.guard}
             </div>
           </Section>
 
-          <Section title="🧠 AI 决策日志（全透明）">
+          <Section no="02" title="AI 决策日志（全透明）">
             <div className="flex flex-col">
               {agent.log.map((d, i) => (
                 <div key={i} className="flex gap-3 border-b border-line/70 py-3 last:border-0">
                   <span
-                    className={`flex w-16 flex-none items-center justify-center rounded-md text-[12px] font-extrabold ${actCls(
+                    className={`flex w-14 flex-none items-center justify-center rounded text-[11px] font-extrabold ${actCls(
                       d.action
                     )}`}
                   >
                     {d.action}
                   </span>
                   <div>
-                    <div className="text-[11.5px] text-ink-2">{d.time}</div>
-                    <div>{d.text}</div>
+                    <div className="num text-[11.5px] text-ink-3">{d.time}</div>
+                    <div className="text-[13px]">{d.text}</div>
                     <div className="mt-0.5 text-[11.5px] text-ink-3">{d.meta}</div>
                   </div>
                 </div>
@@ -122,19 +193,19 @@ export function AgentDetail({ agent }: { agent: Agent }) {
 
         {/* right */}
         <div className="flex flex-col gap-4">
-          <Section title={`🛡 风险分构成（${agent.riskScore}/100）`}>
+          <Section no="03" title={`风险分构成（${agent.riskScore}/100）`}>
             <div className="flex flex-col gap-2.5">
               {agent.riskBreakdown.map((p) => (
                 <div key={p.key}>
                   <div className="flex items-center justify-between text-[12.5px]">
                     <span className="font-semibold">{p.label}</span>
-                    <span className="text-ink-2">
+                    <span className="num text-ink-2">
                       权重 {(p.weight * 100).toFixed(0)}% · 风险 {(p.risk * 100).toFixed(0)}%
                     </span>
                   </div>
-                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
-                    <div
-                      className="h-full rounded-full"
+                  <div className="riskbar mt-1">
+                    <i
+                      className="block h-full"
                       style={{ width: `${p.risk * 100}%`, background: riskColor(100 - p.risk * 100) }}
                     />
                   </div>
@@ -147,20 +218,20 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             </p>
           </Section>
 
-          <Section title="📊 收益归因">
+          <Section no="04" title="收益归因">
             <div className="space-y-2.5">
               {agent.attribution.byBucket.map((b) => (
                 <div key={b.key}>
                   <div className="flex items-center justify-between text-[12.5px]">
                     <span className="font-semibold">{b.label}</span>
-                    <span style={{ color: b.value >= 0 ? "var(--color-success)" : "var(--color-danger)" }}>
+                    <span className="num" style={{ color: b.value >= 0 ? "var(--color-success)" : "var(--color-danger)" }}>
                       {b.value >= 0 ? "+" : ""}
                       {b.value.toFixed(1)}%
                     </span>
                   </div>
-                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
-                    <div
-                      className="h-full rounded-full"
+                  <div className="riskbar mt-1">
+                    <i
+                      className="block h-full"
                       style={{
                         width: `${Math.min(100, (Math.abs(b.value) / attrScale) * 100)}%`,
                         background: b.value >= 0 ? "var(--color-success)" : "var(--color-danger)",
@@ -170,14 +241,14 @@ export function AgentDetail({ agent }: { agent: Agent }) {
                 </div>
               ))}
             </div>
-            <div className="mt-3 rounded-lg border border-line bg-surface-2 px-3 py-2">
+            <div className="mt-3 border border-line bg-surface-2 px-3 py-2">
               <div className="flex items-center justify-between text-[12px]">
                 <span className="font-semibold">运气占比</span>
-                <span className="text-ink-2">{(agent.attribution.luckShare * 100).toFixed(0)}%</span>
+                <span className="num text-ink-2">{(agent.attribution.luckShare * 100).toFixed(0)}%</span>
               </div>
-              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface">
-                <div
-                  className="h-full rounded-full"
+              <div className="riskbar mt-1">
+                <i
+                  className="block h-full"
                   style={{ width: `${agent.attribution.luckShare * 100}%`, background: "var(--color-warning)" }}
                 />
               </div>
@@ -188,13 +259,13 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             </p>
           </Section>
 
-          <Section title="🔍 反过拟合认证">
+          <Section no="05" title="反过拟合认证">
             <div className="flex items-center justify-between">
-              <span className={`rounded-md px-2.5 py-1 text-[12.5px] font-bold ${robCls(agent.robustness.label)}`}>
+              <span className={`rounded px-2.5 py-1 text-[12.5px] font-bold ${robCls(agent.robustness.label)}`}>
                 {agent.robustness.label}
               </span>
               <div className="text-right">
-                <div className="text-[22px] font-extrabold" style={{ color: riskColor(agent.robustness.stabilityScore) }}>
+                <div className="num text-[22px] font-extrabold" style={{ color: riskColor(agent.robustness.stabilityScore) }}>
                   {agent.robustness.stabilityScore}
                 </div>
                 <div className="text-[11px] text-ink-2">稳健度 / 100</div>
@@ -209,19 +280,19 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             </div>
 
             <div className="mt-3 flex h-16 items-end gap-1">
-              {agent.robustness.altReturns.map((r, i) => {
+              {agent.robustness.altReturns.map((x, i) => {
                 const maxAbs = Math.max(1, ...agent.robustness.altReturns.map(Math.abs));
                 const isBase = i === 0;
                 return (
                   <div
                     key={i}
-                    title={`${r >= 0 ? "+" : ""}${r.toFixed(1)}%`}
+                    title={`${x >= 0 ? "+" : ""}${x.toFixed(1)}%`}
                     className="flex-1 rounded-sm"
                     style={{
-                      height: `${Math.min(100, (Math.abs(r) / maxAbs) * 100)}%`,
+                      height: `${Math.min(100, (Math.abs(x) / maxAbs) * 100)}%`,
                       background: isBase
                         ? "var(--color-accent)"
-                        : r >= 0
+                        : x >= 0
                           ? "var(--color-success)"
                           : "var(--color-danger)",
                       opacity: isBase ? 1 : 0.75,
@@ -238,32 +309,27 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             </div>
 
             <p className="mt-2 text-[11.5px] leading-relaxed text-ink-3">{agent.robustness.note}</p>
-            <p className="mt-1 text-[11px] text-ink-3">
-              认证方法：同一策略在 {agent.robustness.runs - 1} 条独立随机行情下重跑，统计胜率与基准分位，判断榜单收益是否可复现。
-            </p>
           </Section>
 
-          <Section title="🔐 决策日志存证">
+          <Section no="06" title="决策日志存证">
             <div className="flex items-center gap-2">
-              <span className="rounded-md bg-success/12 px-2 py-0.5 text-[12px] font-bold text-success">
-                ✅ 已生成内容指纹
+              <span className="rounded bg-success/12 px-2 py-0.5 text-[12px] font-bold text-success">
+                ✓ 已生成内容指纹
               </span>
-              <span className="text-[12px] text-ink-2">SHA-256</span>
+              <span className="num text-[12px] text-ink-2">SHA-256</span>
             </div>
-            <div className="mt-2 break-all rounded-lg border border-line bg-surface-2 px-3 py-2 font-mono text-[11.5px] text-ink-2">
-              {agent.integrityHash}
-            </div>
+            <div className="term mt-2 break-all px-3 py-2 text-[11.5px]">{agent.integrityHash}</div>
             <button
               onClick={verify}
-              className="mt-2 w-full rounded-lg border border-line bg-surface py-2 text-[13px] font-semibold"
+              className="mt-2 w-full rounded border border-line bg-surface py-2 text-[13px] font-semibold hover:border-accent/50"
             >
-              🔎 校验当前日志指纹
+              ﹀ 校验当前日志指纹
             </button>
             {verified !== null && (
               <p className={`mt-2 text-[12px] ${verified ? "text-success" : "text-danger"}`}>
                 {verified
-                  ? "✅ 校验通过：页面展示的决策日志与存证指纹完全一致，未被篡改。"
-                  : "❌ 校验失败：当前展示内容与存证指纹不一致。"}
+                  ? "✓ 校验通过：页面展示的决策日志与存证指纹完全一致，未被篡改。"
+                  : "✗ 校验失败：当前展示内容与存证指纹不一致。"}
               </p>
             )}
             <p className="mt-1 text-[11px] text-ink-3">
@@ -271,42 +337,43 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             </p>
           </Section>
 
-          <Section title="💼 实时持仓">
-            <table className="w-full text-[13px]">
+          <Section no="07" title="期末持仓 = 当前建议仓位">
+            <table className="dtbl">
               <thead>
-                <tr className="text-ink-2">
-                  <th className="py-2 text-left font-semibold">代码</th>
-                  <th className="py-2 text-left font-semibold">名称</th>
-                  <th className="py-2 text-left font-semibold">数量</th>
-                  <th className="py-2 text-left font-semibold">现价</th>
-                  <th className="py-2 text-left font-semibold">市值</th>
+                <tr>
+                  <th>代码</th>
+                  <th>名称</th>
+                  <th className="text-right">数量</th>
+                  <th className="text-right">现价</th>
+                  <th className="text-right">仓位</th>
                 </tr>
               </thead>
               <tbody>
-                {agent.positions.map((p, i) => (
-                  <tr key={i} className="border-t border-line/70">
-                    <td className="py-2 font-bold">{p.code}</td>
-                    <td className="py-2">{p.name}</td>
-                    <td className="py-2">{p.qty}</td>
-                    <td className="py-2">{p.price}</td>
-                    <td className="py-2">{p.mv}</td>
-                  </tr>
-                ))}
+                {(() => {
+                  const totalMv = agent.positions.reduce((s, x) => s + Number(x.mv), 0);
+                  return agent.positions.map((p, i) => {
+                    const share = totalMv > 0 ? (Number(p.mv) / totalMv) * 100 : 0;
+                    return (
+                      <tr key={i}>
+                        <td className="num font-bold">{p.code}</td>
+                        <td>{p.name}</td>
+                        <td className="num text-right">{p.qty}</td>
+                        <td className="num text-right">{p.price}</td>
+                        <td className="num text-right">{share.toFixed(0)}%</td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
+            <p className="mt-2 text-[11.5px] text-ink-3">
+              引擎在 360 个交易日末的真实持仓，即该策略「当前会怎么做」的建议仓位（模拟盘，非投资建议）。
+            </p>
           </Section>
 
-          <Section title="📡 验证协议">
+          <Section no="08" title="验证协议">
             <div className="text-[13px] text-ink-2">
-              <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${tb.className}`}>
-                {tb.label}
-              </span>
-              {agent.engine && (
-                <span className={`ml-1 rounded-md px-2 py-0.5 text-[11px] font-bold ${engineCls(agent.engine)}`}>
-                  {engineBadge(agent.engine)}
-                </span>
-              )}
-              <div className="mt-3">
+              <div className="mt-1">
                 <b>说明：</b>
                 {tierDesc[agent.tier]}
               </div>
@@ -328,27 +395,25 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             </div>
             <Link
               href={`/create?fork=${agent.id}`}
-              className="mt-3.5 block w-full rounded-lg border border-line bg-surface py-2.5 text-center text-[13px] font-semibold"
+              className="mt-3.5 block w-full rounded border border-line bg-surface py-2.5 text-center text-[13px] font-semibold hover:border-accent/50"
             >
               ⑂ Fork 这个策略
             </Link>
           </Section>
 
-          <Section title="🌪 黑天鹅抗压">
+          <Section no="09" title="黑天鹅抗压">
             <div className="flex flex-col gap-3">
               {STRESS_SCENARIOS.map((scn) => {
                 const s = agent.stress[scn.id];
                 if (!s) return null;
                 return (
-                  <div key={scn.id} className="rounded-lg border border-line bg-surface-2 p-3">
+                  <div key={scn.id} className="border border-line bg-surface-2 p-3">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-bold">{scn.name}</div>
                         <div className="text-[11.5px] text-ink-2">{scn.period}</div>
                       </div>
-                      <span
-                        className={`rounded-md px-2 py-0.5 text-[11.5px] font-bold ${stressCls(s.status)}`}
-                      >
+                      <span className={`rounded px-2 py-0.5 text-[11.5px] font-bold ${stressCls(s.status)}`}>
                         {s.status}
                         {s.survived ? " · 存活" : " · 出局"}
                       </span>
@@ -356,11 +421,11 @@ export function AgentDetail({ agent }: { agent: Agent }) {
                     <div className="mt-2 flex gap-4 text-[13px]">
                       <div>
                         <span className="text-ink-2">压力收益 </span>
-                        <b className={s.totalReturn >= 0 ? "up" : "down"}>{fmtPct(s.totalReturn)}</b>
+                        <b className={`num ${s.totalReturn >= 0 ? "up" : "down"}`}>{fmtPct(s.totalReturn)}</b>
                       </div>
                       <div>
                         <span className="text-ink-2">最大回撤 </span>
-                        <b className="down">{fmtPct(s.maxDD)}</b>
+                        <b className="num down">{fmtPct(s.maxDD)}</b>
                       </div>
                     </div>
                   </div>
@@ -376,7 +441,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
   );
 }
 
-function Stat({
+function Kpi({
   v,
   l,
   cls,
@@ -388,8 +453,8 @@ function Stat({
   style?: CSSProperties;
 }) {
   return (
-    <div className="rounded-xl border border-line bg-surface p-4 shadow-sm">
-      <div className={`text-[20px] font-extrabold ${cls ?? ""}`} style={style}>
+    <div className="bg-surface px-4 py-3.5">
+      <div className={`num text-[20px] font-extrabold ${cls ?? ""}`} style={style}>
         {v}
       </div>
       <div className="mt-0.5 text-[12px] text-ink-2">{l}</div>
@@ -397,10 +462,13 @@ function Stat({
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ no, title, children }: { no: string; title: string; children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-line bg-surface p-5 shadow-sm">
-      <h3 className="mb-3 text-[15px] font-extrabold">{title}</h3>
+    <div className="border border-line bg-surface p-4">
+      <h3 className="mb-3 flex items-baseline gap-2 text-[14.5px] font-extrabold">
+        <span className="num text-[11px] font-bold text-ink-3">{no}</span>
+        {title}
+      </h3>
       {children}
     </div>
   );
@@ -439,9 +507,9 @@ function robCls(l: RobustnessLabel): string {
 
 function Mini({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-line bg-surface-2 px-3 py-2">
+    <div className="border border-line bg-surface-2 px-3 py-2">
       <div className="text-[11px] text-ink-2">{label}</div>
-      <div className="mt-0.5 font-bold">{value}</div>
+      <div className="num mt-0.5 font-bold">{value}</div>
     </div>
   );
 }

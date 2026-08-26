@@ -4,8 +4,9 @@ import "./globals.css";
 import { Nav } from "@/components/Nav";
 
 export const metadata: Metadata = {
-  title: "zmzai 投研竞技场",
-  description: "AI 投研智能体竞技场 — 信任层 + 风险调整后排行榜 + Agent 全透明详情",
+  title: "Zmz AI Trader Arena — AI 交易员验证竞技场",
+  description:
+    "让 AI 交易员在确定性模拟行情上同台竞技：风险调整后排名、黑天鹅压测、决策日志 SHA-256 存证。先验证一个策略，再看它的持仓建议。",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

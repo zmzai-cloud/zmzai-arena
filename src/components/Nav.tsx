@@ -1,9 +1,12 @@
 "use client";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { AUTH_ORIGIN, loginUrl, logoutUrl, type SessionUser } from "@/lib/auth";
+import { Navbar, navItemClass } from "@zmzai/theme/components/navbar";
+import { loginUrl, logoutUrl, type SessionUser } from "@/lib/auth";
 
+// 全域统一顶栏：Logo + Wordmark（ZMZAI · trader-arena），与其他 7 站同源
 export function Nav() {
   const pathname = usePathname();
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -20,56 +23,47 @@ export function Nav() {
   }, []);
 
   return (
-    <nav className="sticky top-0 z-10 border-b border-line bg-bg/80 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-[1180px] items-center gap-6 px-5">
-        <Link href="/" className="flex items-center gap-2 text-[15px] font-extrabold tracking-wide">
-          <span className="inline-block h-2.5 w-2.5 rounded-full bg-accent" />
-          zmzai <span className="text-accent">投研竞技场</span>
-        </Link>
-        <div className="ml-2 hidden items-center gap-1 text-[13px] font-semibold text-ink-2 sm:flex">
-          <Link href="/" className="rounded-lg bg-surface-2 px-3 py-1.5 text-ink">
-            排行榜
-          </Link>
-          <span className="cursor-pointer rounded-lg px-3 py-1.5 hover:bg-surface-2">发现</span>
-          <Link href="/create" className="rounded-lg px-3 py-1.5 hover:bg-surface-2">
-            创建
-          </Link>
-          <Link href="/me" className="rounded-lg px-3 py-1.5 hover:bg-surface-2">
-            我的
-          </Link>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
+    <Navbar
+      sublabel="trader-arena"
+      badge={<span className="num text-[11px] tracking-wide text-ink-3">arena.zmzai.cloud</span>}
+      brandHref="/"
+      actions={
+        <>
           {user ? (
             <>
-              <Link
-                href="/me"
-                className="rounded-lg bg-surface-2 px-3 py-1.5 text-[13px] font-semibold text-ink"
-              >
+              <Link href="/me" className={navItemClass(false)}>
                 {user.name}
               </Link>
-              <a
-                href={logoutUrl(pathname)}
-                className="rounded-lg bg-surface-2 px-3 py-1.5 text-[13px] font-semibold text-ink hover:bg-surface-2"
-              >
+              <a href={logoutUrl(pathname)} className={navItemClass(false)}>
                 登出
               </a>
             </>
           ) : (
-            <a
-              href={loginUrl(pathname)}
-              className="rounded-lg bg-surface-2 px-3 py-1.5 text-[13px] font-semibold text-ink hover:bg-surface-2"
-            >
+            <a href={loginUrl(pathname)} className={navItemClass(false)}>
               登录
             </a>
           )}
           <Link
             href="/create"
-            className="rounded-lg bg-accent px-3 py-1.5 text-[13px] font-semibold text-accent-ink"
+            className="rounded-full bg-accent px-3.5 py-1.5 text-sm font-semibold text-accent-ink transition-colors hover:opacity-90"
           >
-            + 创建智能体
+            + 创建交易员
           </Link>
-        </div>
-      </div>
-    </nav>
+        </>
+      }
+    >
+      <Link href="/" className={navItemClass(pathname === "/")}>
+        首页
+      </Link>
+      <Link href="/arena" className={navItemClass(pathname.startsWith("/arena"))}>
+        竞技场
+      </Link>
+      <Link href="/create" className={navItemClass(pathname.startsWith("/create"))}>
+        创建
+      </Link>
+      <Link href="/me" className={navItemClass(pathname.startsWith("/me"))}>
+        我的
+      </Link>
+    </Navbar>
   );
 }

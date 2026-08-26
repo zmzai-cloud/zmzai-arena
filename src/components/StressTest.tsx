@@ -87,7 +87,7 @@ export function StressTest() {
             <button
               key={scn.id}
               onClick={() => setSel(scn.id)}
-              className={`rounded-xl border px-4 py-2.5 text-left transition-colors ${
+              className={`rounded border px-4 py-2.5 text-left transition-colors ${
                 active
                   ? "border-accent bg-accent/10"
                   : "border-line bg-surface hover:border-accent/50"
@@ -105,9 +105,9 @@ export function StressTest() {
 
       <p className="mt-3 text-[12.5px] text-ink-2">{result.scenario.desc}</p>
 
-      {/* 抗压排行表 */}
-      <div className="mt-3 overflow-hidden rounded-xl border border-line bg-surface shadow-sm">
-        <table className="w-full border-collapse text-[13.5px]">
+      {/* 抗压排行表（移动端横向滚动，不裁剪不撑破视口） */}
+      <div className="mt-3 overflow-x-auto border border-line bg-surface">
+        <table className="w-full min-w-[640px] border-collapse text-[13.5px]">
           <thead>
             <tr className="bg-surface-2 text-ink-2">
               <th className="px-3.5 py-3 text-left font-bold">抗压排名</th>

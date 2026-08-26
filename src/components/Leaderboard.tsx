@@ -12,6 +12,7 @@ type SortKey = "totalReturn" | "maxDD" | "sharpe" | "riskScore";
 
 const markets = ["全部", ...Array.from(new Set(STATIC_AGENTS.map((a) => a.market)))];
 
+// 终端式行情表：mono 表头 + 数字右对齐 + 细线，无圆角无阴影
 export function Leaderboard() {
   const [filter, setFilter] = useState("全部");
   const [sortKey, setSortKey] = useState<SortKey>("sharpe");
@@ -32,61 +33,62 @@ export function Leaderboard() {
       setDir(-1);
     }
   };
-  const arrow = (k: SortKey) => (k === sortKey ? (dir === -1 ? " ↓" : " ↑") : " ⇅");
+  const arrow = (k: SortKey) => (k === sortKey ? (dir === -1 ? "↓" : "↑") : "⇅");
 
   return (
-    <div>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
+    <div className="mt-6">
+      {/* 市场筛选：下划线 tab，直角金融风 */}
+      <div className="flex items-center gap-1 border-b border-line">
         {markets.map((m) => (
           <button
             key={m}
             onClick={() => setFilter(m)}
-            className={`rounded-full border px-3.5 py-1.5 text-[13px] font-semibold ${
+            className={`-mb-px border-b-2 px-3 py-2 text-[13px] font-semibold transition-colors ${
               filter === m
-                ? "border-accent bg-accent text-accent-ink"
-                : "border-line bg-surface text-ink-2"
+                ? "border-accent text-ink"
+                : "border-transparent text-ink-3 hover:text-ink"
             }`}
           >
             {m}
           </button>
         ))}
-        <span className="ml-auto text-[12.5px] text-ink-2">
-          点表头「总收益 / 回撤 / 夏普 / 风险分」可排序
+        <span className="ml-auto hidden pb-2 text-[11.5px] text-ink-3 sm:block">
+          点表头「总收益 / 回撤 / 夏普 / 风险分」排序
         </span>
       </div>
 
-      <div className="mt-3 overflow-hidden rounded-xl border border-line bg-surface shadow-sm">
-        <table className="w-full border-collapse text-[13.5px]">
-          <thead>
-            <tr className="bg-surface-2 text-ink-2">
-              <th className="px-3.5 py-3 text-left font-bold">#</th>
-              <th className="px-3.5 py-3 text-left font-bold">智能体 / 人设</th>
-              <th className="px-3.5 py-3 text-left font-bold">创建者</th>
-              <th className="px-3.5 py-3 text-left font-bold">市场 · 风格</th>
-              <th className="cursor-pointer px-3.5 py-3 text-left font-bold" onClick={() => toggleSort("totalReturn")}>
-                总收益{arrow("totalReturn")}
-              </th>
-              <th className="cursor-pointer px-3.5 py-3 text-left font-bold" onClick={() => toggleSort("maxDD")}>
-                最大回撤{arrow("maxDD")}
-              </th>
-              <th className="cursor-pointer px-3.5 py-3 text-left font-bold" onClick={() => toggleSort("sharpe")}>
-                夏普{arrow("sharpe")}
-              </th>
-              <th className="cursor-pointer px-3.5 py-3 text-left font-bold" onClick={() => toggleSort("riskScore")}>
-                风险分{arrow("riskScore")}
-              </th>
-              <th className="px-3.5 py-3 text-left font-bold">稳健度</th>
-              <th className="px-3.5 py-3 text-left font-bold">天数</th>
-              <th className="px-3.5 py-3 text-center font-bold">关注</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((a, i) => (
-              <Row key={a.id} a={a} rank={i + 1} />
-            ))}
-          </tbody>
-        </table>
+      {/* 榜单表格：移动端横向滚动，不撑破视口 */}
+      <div className="mt-1 overflow-x-auto">
+        <table className="dtbl min-w-[720px]">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>交易员 / 策略</th>
+            <th>市场 · 风格</th>
+            <th className="cursor-pointer" onClick={() => toggleSort("totalReturn")}>
+              总收益{sortKey === "totalReturn" && <span className="ml-1 text-accent">{arrow("totalReturn")}</span>}
+            </th>
+            <th className="cursor-pointer" onClick={() => toggleSort("maxDD")}>
+              最大回撤{sortKey === "maxDD" && <span className="ml-1 text-accent">{arrow("maxDD")}</span>}
+            </th>
+            <th className="cursor-pointer" onClick={() => toggleSort("sharpe")}>
+              夏普{sortKey === "sharpe" && <span className="ml-1 text-accent">{arrow("sharpe")}</span>}
+            </th>
+            <th className="cursor-pointer" onClick={() => toggleSort("riskScore")}>
+              风险分{sortKey === "riskScore" && <span className="ml-1 text-accent">{arrow("riskScore")}</span>}
+            </th>
+            <th>稳健度</th>
+            <th className="text-center">关注</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((a, i) => (
+            <Row key={a.id} a={a} rank={i + 1} />
+          ))}
+        </tbody>
+      </table>
       </div>
+
       <p className="mt-6 text-center text-[12px] text-ink-2">
         数据为模拟演示，仅用于产品原型展示 · 投资有风险，本平台不参与任何真实交易
       </p>
@@ -97,60 +99,52 @@ export function Leaderboard() {
 function Row({ a, rank }: { a: Agent; rank: number }) {
   const tb = tierBadge(a.tier);
   return (
-    <tr className="border-b border-line/70 transition-colors last:border-0 hover:bg-surface-2">
-      <td className="px-3.5 py-3 font-bold text-ink-2">{rank}</td>
-      <td className="px-3.5 py-3">
-        <Link href={`/agents/${a.id}`} className="flex items-center gap-3">
-          <span className="flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-surface-2 text-[20px]">
+    <tr>
+      <td className="num text-ink-3">{rank}</td>
+      <td>
+        <Link href={`/agents/${a.id}`} className="group flex items-center gap-2.5">
+          <span className="flex h-8 w-8 flex-none items-center justify-center rounded bg-surface-2 text-[16px]">
             {a.emoji}
           </span>
-          <span>
-            <span className="font-bold">
-              {a.name} {a.verified && <span className="text-accent">✔ 已验证</span>}
+          <span className="min-w-0">
+            <span className="flex items-center gap-1.5 font-semibold">
+              <span className="truncate">{a.name}</span>
+              {a.verified && (
+                <span className="num text-[10px] font-bold text-accent">✓VERIFIED</span>
+              )}
+              {a.engine && (
+                <span className={`rounded px-1.5 py-px text-[10px] font-bold ${engineCls(a.engine)}`}>
+                  {engineBadge(a.engine)}
+                </span>
+              )}
             </span>
-            <span className="block text-[12px] text-ink-2">{a.slogan}</span>
+            <span className="block truncate text-[12px] text-ink-3">{a.slogan}</span>
           </span>
         </Link>
       </td>
-      <td className="px-3.5 py-3 text-ink-2">{a.creator}</td>
-      <td className="px-3.5 py-3">
-        <span className="rounded-md bg-surface-2 px-2 py-0.5 text-[11.5px] font-bold text-accent">
-          {a.market}
-        </span>
-        <span className="ml-1 text-ink-2">· {a.style}</span>
-        <div className="mt-1 flex flex-wrap items-center gap-1">
-          <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${tb.className}`}>
-            {tb.label}
-          </span>
-          {a.engine && (
-            <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${engineCls(a.engine)}`}>
-              {engineBadge(a.engine)}
-            </span>
-          )}
-        </div>
+      <td>
+        <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] font-bold">{a.market}</span>
+        <span className="ml-1.5 text-[12px] text-ink-3">{a.style}</span>
       </td>
-      <td className={`px-3.5 py-3 font-bold ${a.totalReturn >= 0 ? "up" : "down"}`}>
-        {fmtPct(a.totalReturn)}
-      </td>
-      <td className={`px-3.5 py-3 font-bold ${a.maxDD >= 0 ? "up" : "down"}`}>{fmtPct(a.maxDD)}</td>
-      <td className="px-3.5 py-3 font-extrabold">{a.sharpe.toFixed(2)}</td>
-      <td className="px-3.5 py-3">
-        <span className="riskbar align-middle">
+      <td className={`num text-right ${a.totalReturn >= 0 ? "up" : "down"}`}>{fmtPct(a.totalReturn)}</td>
+      <td className={`num text-right ${a.maxDD >= 0 ? "up" : "down"}`}>{fmtPct(a.maxDD)}</td>
+      <td className="num text-right font-extrabold">{a.sharpe.toFixed(2)}</td>
+      <td className="text-right">
+        <span className="riskbar inline-block w-14 align-middle">
           <i
             className="block h-full"
             style={{ width: `${a.riskScore}%`, background: riskColor(a.riskScore) }}
           />
         </span>
-        <span className="ml-2">{a.riskScore}</span>
+        <span className="num ml-2">{a.riskScore}</span>
       </td>
-      <td className="px-3.5 py-3">
-        <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${robCls(a.robustness.label)}`}>
+      <td>
+        <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-bold ${robCls(a.robustness.label)}`}>
           {a.robustness.label}
         </span>
-        <span className="ml-1.5 text-ink-2">{a.robustness.stabilityScore}</span>
+        <span className="num ml-1.5 text-[12px] text-ink-3">{a.robustness.stabilityScore}</span>
       </td>
-      <td className="px-3.5 py-3 text-ink-2">{a.days || "—"}</td>
-      <td className="px-3.5 py-3 text-center">
+      <td className="text-center">
         <FollowStar id={a.id} />
       </td>
     </tr>
@@ -169,7 +163,8 @@ function FollowStar({ id }: { id: number }) {
     <button
       onClick={() => toggleFollow(id)}
       title={followed ? "取消关注" : "关注"}
-      className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-[17px] transition ${
+      aria-label={followed ? "取消关注" : "关注"}
+      className={`inline-flex h-7 w-7 items-center justify-center rounded text-[15px] transition ${
         followed ? "bg-accent/10 text-accent" : "bg-surface-2 text-ink-3 hover:text-accent"
       }`}
     >

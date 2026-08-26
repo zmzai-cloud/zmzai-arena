@@ -24,14 +24,14 @@ export function MyFollowedAgents() {
 
   if (list.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-line bg-surface/50 p-5">
+      <div className="rounded border border-dashed border-line bg-surface/50 p-5">
         <div className="text-[15px] font-bold">⭐ 我关注的 Agent</div>
         <p className="mt-1.5 text-[13px] leading-relaxed text-ink-2">
           在排行榜或智能体详情页点「关注」，你认可的策略就会出现在这里，方便随时回看它的调仓与抗压表现。
         </p>
         <Link
           href="/"
-          className="mt-3 inline-block rounded-lg bg-accent px-4 py-2 text-[13px] font-semibold text-accent-ink"
+          className="mt-3 inline-block rounded bg-accent px-4 py-2 text-[13px] font-semibold text-accent-ink"
         >
           去排行榜找策略
         </Link>
@@ -40,11 +40,11 @@ export function MyFollowedAgents() {
   }
 
   return (
-    <div className="rounded-2xl border border-line bg-surface p-5">
+    <div className="rounded border border-line bg-surface p-5">
       <div className="text-[15px] font-bold">⭐ 我关注的 Agent（{list.length}）</div>
       <div className="mt-3 flex flex-col gap-2">
         {list.map((a) => (
-          <div key={a.id} className="flex items-center gap-3 rounded-lg border border-line bg-surface-2 p-3">
+          <div key={a.id} className="flex items-center gap-3 rounded border border-line bg-surface-2 p-3">
             <span className="text-2xl">{a.emoji}</span>
             <div className="min-w-0 flex-1">
               <Link href={`/agents/${a.id}`} className="font-bold hover:text-accent">
@@ -59,7 +59,7 @@ export function MyFollowedAgents() {
             </div>
             <button
               onClick={() => toggleFollow(a.id)}
-              className="rounded-lg border border-line px-2.5 py-1.5 text-[12px] text-ink-2 hover:text-danger"
+              className="rounded border border-line px-2.5 py-1.5 text-[12px] text-ink-2 hover:text-danger"
             >
               取消关注
             </button>
