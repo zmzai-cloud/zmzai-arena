@@ -145,6 +145,7 @@ export function createUserAgent(input: CreateAgentInput, creator: string): Agent
     maxDD: res.metrics.maxDD,
     sharpe: res.metrics.sharpe,
     riskScore: res.metrics.riskScore,
+    riskBreakdown: res.metrics.riskBreakdown,
     days: simDays,
     followers: 0,
     slogan: input.slogan?.trim() || `${input.name} · 用户策略`,

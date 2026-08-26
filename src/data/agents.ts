@@ -7,6 +7,7 @@
 import { generateMarket, INSTRUMENT_MAP } from "@/sim/market";
 import { STRATEGIES } from "@/sim/strategies";
 import { runSimulation, type Tier as SimTier, type RawDecision } from "@/sim/engine";
+import { type RiskPillar } from "@/sim/metrics";
 import {
   runStressTest,
   STRESS_SCENARIOS,
@@ -45,7 +46,8 @@ export interface Agent {
   totalReturn: number; // %
   maxDD: number; // 最大回撤 %
   sharpe: number;
-  riskScore: number; // 0-100
+  riskScore: number; // 0-100，越高越稳健
+  riskBreakdown: RiskPillar[]; // 统一风险分构成（5 支柱）
   days: number;
   followers: number;
   slogan: string;
@@ -366,6 +368,7 @@ export const agents: Agent[] = META.map((m) => {
     maxDD: res.metrics.maxDD,
     sharpe: res.metrics.sharpe,
     riskScore: res.metrics.riskScore,
+    riskBreakdown: res.metrics.riskBreakdown,
     days: m.days,
     followers: m.followers,
     slogan: m.slogan,

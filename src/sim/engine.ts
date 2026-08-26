@@ -120,7 +120,7 @@ export function runSimulation(
     nav,
     positions: buildPositions(market, holdings, simDays - 1),
     decisions,
-    metrics: computeMetrics(nav, cfg.aggr),
+    metrics: computeMetrics(nav, { aggr: cfg.aggr, maxSingle: cfg.maxSingle, minCash: cfg.minCash }),
   };
 }
 
@@ -254,7 +254,7 @@ function runNeutral(cfg: StrategyConfig, market: PriceSeries, simDays: number, t
     { code: "多头", name: "一篮子低估值", qty: "—", price: "—", mv: fmtMoney(longQty * priceAt(market, longC, simDays - 1)) },
     { code: "空头", name: "一篮子高估值", qty: "—", price: "—", mv: fmtMoney(-(shortQty * priceAt(market, shortC, simDays - 1))) },
   ];
-  return { nav, positions, decisions, metrics: computeMetrics(nav, cfg.aggr) };
+  return { nav, positions, decisions, metrics: computeMetrics(nav, { aggr: cfg.aggr, maxSingle: cfg.maxSingle, minCash: cfg.minCash }) };
 }
 
 // ---------- 工具 ----------

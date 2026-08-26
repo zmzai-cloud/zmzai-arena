@@ -102,6 +102,31 @@ export function AgentDetail({ agent }: { agent: Agent }) {
 
         {/* right */}
         <div className="flex flex-col gap-4">
+          <Section title={`🛡 风险分构成（${agent.riskScore}/100）`}>
+            <div className="flex flex-col gap-2.5">
+              {agent.riskBreakdown.map((p) => (
+                <div key={p.key}>
+                  <div className="flex items-center justify-between text-[12.5px]">
+                    <span className="font-semibold">{p.label}</span>
+                    <span className="text-ink-2">
+                      权重 {(p.weight * 100).toFixed(0)}% · 风险 {(p.risk * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${p.risk * 100}%`, background: riskColor(100 - p.risk * 100) }}
+                    />
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-ink-3">{p.note}</div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-[11.5px] leading-relaxed text-ink-3">
+              风险分 = 100 × (1 − Σ 权重×支柱风险)。支柱越红越危险，综合分越低越稳健；既看净值真实表现，也看策略自设护栏。
+            </p>
+          </Section>
+
           <Section title="💼 实时持仓">
             <table className="w-full text-[13px]">
               <thead>
