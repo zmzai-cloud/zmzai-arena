@@ -8,6 +8,7 @@ import { generateMarket, INSTRUMENT_MAP } from "@/sim/market";
 import { STRATEGIES } from "@/sim/strategies";
 import { runSimulation, type Tier as SimTier, type RawDecision } from "@/sim/engine";
 import { type RiskPillar } from "@/sim/metrics";
+import { attributeReturn, type Attribution } from "@/sim/attribution";
 import {
   runStressTest,
   STRESS_SCENARIOS,
@@ -48,6 +49,7 @@ export interface Agent {
   sharpe: number;
   riskScore: number; // 0-100，越高越稳健
   riskBreakdown: RiskPillar[]; // 统一风险分构成（5 支柱）
+  attribution: Attribution; // 收益归因（基准β/行业/选股/择时 + 运气占比）
   days: number;
   followers: number;
   slogan: string;
@@ -369,6 +371,7 @@ export const agents: Agent[] = META.map((m) => {
     sharpe: res.metrics.sharpe,
     riskScore: res.metrics.riskScore,
     riskBreakdown: res.metrics.riskBreakdown,
+    attribution: attributeReturn(res, market, cfg, m.simDays, m.tier as SimTier, m.seed),
     days: m.days,
     followers: m.followers,
     slogan: m.slogan,

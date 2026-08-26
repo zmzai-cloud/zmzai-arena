@@ -8,6 +8,7 @@
 import { INSTRUMENT_MAP } from "@/sim/market";
 import { runSimulation, type RawDecision, type Tier as SimTier } from "@/sim/engine";
 import { stressForConfig, type AgentStress, type SimSpec } from "@/sim/stress";
+import { attributeReturn, type Attribution } from "@/sim/attribution";
 import { type Agent, type Decision, market, agents as STATIC_AGENTS } from "@/data/agents";
 import { type StrategyConfig, type StyleKey } from "@/sim/strategies";
 
@@ -146,6 +147,7 @@ export function createUserAgent(input: CreateAgentInput, creator: string): Agent
     sharpe: res.metrics.sharpe,
     riskScore: res.metrics.riskScore,
     riskBreakdown: res.metrics.riskBreakdown,
+    attribution: attributeReturn(res, market, cfg, simDays, "Paper", seed),
     days: simDays,
     followers: 0,
     slogan: input.slogan?.trim() || `${input.name} · 用户策略`,

@@ -14,6 +14,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
   const tb = tierBadge(agent.tier);
   const rank =
     [...agents].sort((a, b) => b.sharpe - a.sharpe).findIndex((x) => x.id === agent.id) + 1;
+  const attrScale = Math.max(1, ...agent.attribution.byBucket.map((b) => Math.abs(b.value)));
 
   return (
     <div>
@@ -124,6 +125,47 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             </div>
             <p className="mt-3 text-[11.5px] leading-relaxed text-ink-3">
               风险分 = 100 × (1 − Σ 权重×支柱风险)。支柱越红越危险，综合分越低越稳健；既看净值真实表现，也看策略自设护栏。
+            </p>
+          </Section>
+
+          <Section title="📊 收益归因">
+            <div className="space-y-2.5">
+              {agent.attribution.byBucket.map((b) => (
+                <div key={b.key}>
+                  <div className="flex items-center justify-between text-[12.5px]">
+                    <span className="font-semibold">{b.label}</span>
+                    <span style={{ color: b.value >= 0 ? "var(--color-success)" : "var(--color-danger)" }}>
+                      {b.value >= 0 ? "+" : ""}
+                      {b.value.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.min(100, (Math.abs(b.value) / attrScale) * 100)}%`,
+                        background: b.value >= 0 ? "var(--color-success)" : "var(--color-danger)",
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 rounded-lg border border-line bg-surface-2 px-3 py-2">
+              <div className="flex items-center justify-between text-[12px]">
+                <span className="font-semibold">运气占比</span>
+                <span className="text-ink-2">{(agent.attribution.luckShare * 100).toFixed(0)}%</span>
+              </div>
+              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface">
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${agent.attribution.luckShare * 100}%`, background: "var(--color-warning)" }}
+                />
+              </div>
+            </div>
+            <p className="mt-2 text-[11.5px] leading-relaxed text-ink-3">{agent.attribution.note}</p>
+            <p className="mt-1 text-[11px] text-ink-3">
+              总收益 {fmtPct(agent.totalReturn)} = 基准β + 行业 + 选股 + 择时；运气占比越低，收益越可复现。
             </p>
           </Section>
 
