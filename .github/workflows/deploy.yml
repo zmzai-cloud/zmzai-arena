@@ -64,11 +64,16 @@ jobs:
           tar -czf /tmp/${APP_NAME}-${{ github.sha }}.tar.gz \
             --exclude='node_modules' --exclude='.git' --exclude='.next/cache' \
             --exclude='.env*' --exclude='.vercel' $FILES
+          # 本地产物完整性校验：打包损坏（磁盘/缓存异常）在 CI 侧直接暴露，不传到服务器
+          gzip -t /tmp/${APP_NAME}-${{ github.sha }}.tar.gz || exit 1
 
       - name: Upload & deploy to HK server
         run: |
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new \
-            ${HK_USER}@${HK_HOST} "store ${APP_NAME} ${{ github.sha }}" \
+          SSH_OPTS="-i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=3"
+          ssh $SSH_OPTS ${HK_USER}@${HK_HOST} "store ${APP_NAME} ${{ github.sha }}" \
             < /tmp/${APP_NAME}-${{ github.sha }}.tar.gz
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new \
-            ${HK_USER}@${HK_HOST} "deploy ${APP_NAME} ${{ github.sha }}"
+          # 服务器侧校验：ssh 传输截断会静默落盘坏包（gzip: unexpected end of file），
+          # 历史卡死问题根因，store 后立即 gzip -t，坏包在 deploy 前暴露并中止
+          ssh $SSH_OPTS ${HK_USER}@${HK_HOST} \
+            "gzip -t /opt/zmzai/incoming/${APP_NAME}-${{ github.sha }}.tar.gz"
+          ssh $SSH_OPTS ${HK_USER}@${HK_HOST} "deploy ${APP_NAME} ${{ github.sha }}"

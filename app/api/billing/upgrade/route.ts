@@ -1,29 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AUTH_ORIGIN, type SessionUser } from "@/lib/auth";
-import { accountKey, getAccount } from "@/lib/billing-store";
+import { accountKey, getAccount, linkUserEmail } from "@/lib/billing-store";
 import { PLANS } from "@/lib/billing";
+import { afdianConfig } from "@/lib/afdian";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// 创建 Paddle Checkout 交易：返回可直接跳转的 checkout URL。
-// 支付成功由 Paddle webhook（/api/billing/webhook）回调落账，无需前端参与。
-// 未配置 Paddle 凭据时返回 503（前端降级为「内测发放」入口，不展示假支付）。
+// 爱发电收单：爱发电无「开发者创建订单」API，买家在站内购买方案后由 webhook 落账。
+// 本接口只返回购买引导（方案链接 + 需填写的邮箱），不做真实下单。
+// 未配置凭据时返回 503（前端降级为「内测发放」入口，不展示假支付）。
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.PADDLE_API_KEY?.trim();
-  const priceMonthly = process.env.PADDLE_PRICE_MONTHLY?.trim();
-  const priceYearly = process.env.PADDLE_PRICE_YEARLY?.trim();
-  if (!apiKey || !priceMonthly || !priceYearly) {
+  const cfg = afdianConfig();
+  if (!cfg) {
     return NextResponse.json(
       {
         code: "PAYMENT_NOT_CONFIGURED",
-        error: "支付网关尚未开通，Pro 暂通过内测发放获得",
+        error: "支付通道尚未开通，Pro 暂通过内测发放获得",
       },
       { status: 503 }
     );
   }
 
-  // 支付必须挂到登录账号：匿名 IP 会变，无法对账
+  // 支付必须挂到登录账号：留言按邮箱对账，匿名无法匹配
   const cookie = req.headers.get("cookie") ?? "";
   let user: SessionUser | null = null;
   if (cookie) {
@@ -52,48 +51,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ code: "INVALID_BODY", error: "请求体必须是 JSON" }, { status: 400 });
   }
   const period = (body as Record<string, unknown>).period;
-  const priceId = period === "yearly" ? priceYearly : period === "monthly" ? priceMonthly : null;
-  if (!priceId) {
+  if (period !== "monthly" && period !== "yearly") {
     return NextResponse.json({ code: "INVALID_BODY", error: "period 必须是 monthly / yearly" }, { status: 400 });
   }
 
   const fwd = req.headers.get("x-forwarded-for");
   const ip = (fwd ? fwd.split(",")[0]?.trim() : null) || req.headers.get("x-real-ip") || "unknown";
   const key = accountKey(user, ip);
-  const acc = getAccount(key);
+  getAccount(key);
 
-  const origin = req.headers.get("origin") ?? req.nextUrl.origin ?? "https://arena.zmzai.cloud";
+  // 预写邮箱 → userId 索引，保证买家留言邮箱时 webhook 能对账
+  linkUserEmail(user.email, user.id);
 
-  try {
-    const res = await fetch("https://api.paddle.com/transactions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "Paddle-Version": "2024-10-02",
-      },
-      body: JSON.stringify({
-        items: [{ price_id: priceId, quantity: 1 }],
-        custom_data: { account_key: key },
-        success_url: `${origin}/me?paid=1`,
-        // 用户当前已是 Pro 时仍允许续期（Paddle 会走订阅），这里统一用 transaction 一次性支付
-      }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return NextResponse.json(
-        { code: "PADDLE_ERROR", error: `支付网关错误（${res.status}）`, detail: detail.slice(0, 400) },
-        { status: 502 }
-      );
-    }
-    const tx = (await res.json()) as { data?: { id?: string; checkout?: { url?: string } } };
-    const checkoutUrl = tx.data?.checkout?.url;
-    if (!checkoutUrl) {
-      return NextResponse.json({ code: "PADDLE_ERROR", error: "支付网关未返回结账地址" }, { status: 502 });
-    }
-    return NextResponse.json({ checkoutUrl, transactionId: tx.data?.id ?? null, plan: PLANS.pro.name });
-  } catch {
-    return NextResponse.json({ code: "PADDLE_UNREACHABLE", error: "支付网关不可达，请稍后再试" }, { status: 502 });
-  }
+  // 方案链接：优先配置的方案 ID，未配置则指向创作者主页（买家自行选方案）
+  const planId = period === "yearly" ? cfg.planYearly : cfg.planMonthly;
+  const url = planId ? `https://afdian.com/item/${planId}` : "https://afdian.com";
+
+  return NextResponse.json({
+    provider: "afdian",
+    plan: PLANS.pro.name,
+    expiresInDays: period === "yearly" ? 365 : 30,
+    period,
+    url,
+    planId,
+    email: user.email,
+    userId: user.id,
+  });
 }
