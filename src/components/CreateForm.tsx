@@ -2,14 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   INSTRUMENT_OPTIONS,
   STYLE_OPTIONS,
   STYLE_LABELS,
+  STYLE_SIMDAYS,
   createUserAgentRemote,
   saveUserAgent,
+  BacktestQuotaError,
   type CreateAgentInput,
 } from "@/lib/userAgents";
+import { FREE_MAX_SIM_DAYS } from "@/lib/billing";
 import { getAgent } from "@/data/agents";
 import { getUserAgent } from "@/lib/userAgents";
 import { STRATEGIES, type StyleKey } from "@/sim/strategies";
@@ -33,8 +37,22 @@ export function CreateForm({ forkId }: { forkId?: string }) {
   const [slogan, setSlogan] = useState("");
   const [creator, setCreator] = useState("我");
   const [error, setError] = useState("");
+  const [quotaUpgrade, setQuotaUpgrade] = useState<string | null>(null);
+  const [isPro, setIsPro] = useState<boolean | null>(null); // null = 未知（加载中）
   const [submitting, setSubmitting] = useState(false);
   const [forked, setForked] = useState("");
+
+  // 当前计划：决定风格周期是否被拦截（Free 超 120 天需 Pro）
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/billing/me")
+      .then((r) => r.json())
+      .then((d) => alive && setIsPro(d.account?.plan === "pro"))
+      .catch(() => alive && setIsPro(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Fork 预填：挂载后一次性应用（官方 Agent 服务端可解析；用户 Agent 仅存 localStorage，需在客户端读取）
   const forkApplied = useRef(false);
@@ -100,13 +118,20 @@ export function CreateForm({ forkId }: { forkId?: string }) {
     };
     setSubmitting(true);
     setError("");
+    setQuotaUpgrade(null);
     try {
       // 优先走 zmzai-sandbox 隔离沙箱真实回测（含撮合成本），失败自动降级本地引擎
       const agent = await createUserAgentRemote(input, creator);
       saveUserAgent(agent);
       router.push(`/agents/${agent.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "回测失败，请重试");
+      if (err instanceof BacktestQuotaError) {
+        // 配额/计划拦截：展示升级引导，不降级本地引擎
+        setError(err.message);
+        setQuotaUpgrade(err.upgradeUrl ?? "/pricing");
+      } else {
+        setError(err instanceof Error ? err.message : "回测失败，请重试");
+      }
       setSubmitting(false);
     }
   };
@@ -161,18 +186,36 @@ export function CreateForm({ forkId }: { forkId?: string }) {
           <div>
             <label className={labelCls}>交易风格</label>
             <div className="flex flex-wrap gap-2">
-              {STYLE_OPTIONS.map((o) => (
-                <button
-                  key={o.key}
-                  onClick={() => setStyle(o.key)}
-                  className={`rounded-full border px-3.5 py-1.5 text-[13px] font-semibold ${
-                    style === o.key ? "border-accent bg-accent text-accent-ink" : "border-line bg-surface-2 text-ink-2"
-                  }`}
-                >
-                  {o.label}
-                </button>
-              ))}
+              {STYLE_OPTIONS.map((o) => {
+                const simDays = STYLE_SIMDAYS[o.key];
+                const needsPro = simDays > FREE_MAX_SIM_DAYS && !isPro;
+                return (
+                  <button
+                    key={o.key}
+                    onClick={() => setStyle(o.key)}
+                    className={`rounded-full border px-3.5 py-1.5 text-[13px] font-semibold ${
+                      style === o.key ? "border-accent bg-accent text-accent-ink" : "border-line bg-surface-2 text-ink-2"
+                    }`}
+                  >
+                    {o.label}{" "}
+                    <span className={`num text-[10.5px] ${style === o.key ? "text-accent-ink/70" : "text-ink-3"}`}>
+                      {simDays}d
+                    </span>
+                    {needsPro && (
+                      <span className={`ml-1 rounded px-1 text-[9.5px] font-bold ${style === o.key ? "bg-accent-ink/15 text-accent-ink" : "bg-accent/10 text-accent"}`}>
+                        PRO
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
+            {STYLE_SIMDAYS[style] > FREE_MAX_SIM_DAYS && !isPro && (
+              <p className="mt-2 flex items-center gap-1.5 text-[12px] text-warning">
+                ⚠ {STYLE_LABELS[style]}回测 {STYLE_SIMDAYS[style]} 个交易日，超出 Free 计划上限（{FREE_MAX_SIM_DAYS} 天），需升级 Pro
+                <Link href="/pricing" className="font-semibold underline underline-offset-2">查看定价</Link>
+              </p>
+            )}
           </div>
 
           <div>
@@ -235,7 +278,16 @@ export function CreateForm({ forkId }: { forkId?: string }) {
             <input className={fieldCls} value={slogan} onChange={(e) => setSlogan(e.target.value)} placeholder="如：追最强趋势，纪律执行" />
           </div>
 
-          {error && <div className="border border-danger/40 bg-danger/10 px-3 py-2 text-[13px] text-danger">{error}</div>}
+          {error && (
+            <div className="border border-danger/40 bg-danger/10 px-3 py-2 text-[13px] text-danger">
+              {error}
+              {quotaUpgrade && (
+                <Link href={quotaUpgrade} className="ml-1 font-semibold underline underline-offset-2">
+                  查看 Pro 权益
+                </Link>
+              )}
+            </div>
+          )}
 
             <button
               onClick={submit}

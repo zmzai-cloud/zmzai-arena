@@ -35,6 +35,49 @@ export function AgentDetail({ agent }: { agent: Agent }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent.id]);
 
+  // 验证报告导出（Pro 权益）：未登录/Free 时展示升级引导，Pro 直接触发服务端生成的 JSON 下载
+  const [exportState, setExportState] = useState<"idle" | "busy" | "need-pro">("idle");
+  const exportReport = async () => {
+    setExportState("busy");
+    try {
+      const me = await fetch("/api/billing/me").then((r) => r.json());
+      if (!me.account || me.account.plan !== "pro") {
+        setExportState("need-pro");
+        return;
+      }
+      const res = await fetch("/api/report/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agent,
+          engine: agent.engine ?? "local",
+          runId: agent.sandboxRunId ?? null,
+          simDays: agent.days ?? null,
+        }),
+      });
+      if (!res.ok) {
+        setExportState("need-pro");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.headers
+        .get("content-disposition")
+        ?.match(/filename\*=UTF-8''(.+)/)?.[1]
+        ? decodeURIComponent(res.headers.get("content-disposition")!.match(/filename\*=UTF-8''(.+)/)![1])
+        : `arena-verify-${agent.name}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setExportState("idle");
+    } catch {
+      setExportState("idle");
+    }
+  };
+
   return (
     <div>
       <button
@@ -81,7 +124,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             by {agent.creator} · {agent.market} · {agent.style} · {agent.persona}
           </div>
         </div>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap justify-end gap-2">
           <button
             className={`rounded px-3.5 py-2 text-[13px] font-semibold transition-colors ${
               followed
@@ -92,6 +135,13 @@ export function AgentDetail({ agent }: { agent: Agent }) {
           >
             {followed ? "★ 已关注" : "☆ 关注"} · {agent.followers + (followed ? 1 : 0)}
           </button>
+          <button
+            onClick={exportReport}
+            disabled={exportState === "busy"}
+            className="rounded border border-line px-3.5 py-2 text-[13px] font-semibold text-ink transition-colors hover:border-accent/50 disabled:opacity-50"
+          >
+            {exportState === "busy" ? "导出中…" : "⇩ 导出报告"}
+          </button>
           <Link
             href={`/create?fork=${agent.id}`}
             className="rounded bg-accent px-3.5 py-2 text-[13px] font-semibold text-accent-ink"
@@ -99,6 +149,14 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             ⑂ Fork 策略
           </Link>
         </div>
+        {exportState === "need-pro" && (
+          <div className="mt-3 flex w-full flex-wrap items-center gap-x-2 gap-y-1 border border-warning/40 bg-warning/10 px-3.5 py-2 text-[12.5px] text-warning">
+            <span>验证报告导出为 Pro 权益（JSON 留档，含时间戳与来源声明）</span>
+            <Link href="/pricing" className="font-semibold underline underline-offset-2">
+              查看 Pro 权益 →
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* KPI：细线网格 + mono 数字 */}

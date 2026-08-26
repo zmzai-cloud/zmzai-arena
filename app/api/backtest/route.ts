@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { AUTH_ORIGIN, type SessionUser } from "@/lib/auth";
 import { MARKET_DAYS, GLOBAL_SEED, type BacktestInput } from "@/lib/backtest-assemble";
 import { runBacktest } from "@/lib/sandbox-backtest";
+import { accountKey, consumeQuota, peekQuota } from "@/lib/billing-store";
+import { PLANS } from "@/lib/billing";
 import { INSTRUMENT_MAP } from "@/sim/market";
 import { STRATEGIES, type StyleKey, type StrategyConfig } from "@/sim/strategies";
 
@@ -114,17 +116,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ code: "INVALID_BODY", error: s.error }, { status: 400 });
   }
 
-  const input: BacktestInput = {
-    cfg: s.cfg,
-    simDays: s.simDays,
-    seed: s.seed,
-    tier: "Paper",
-    marketDays: MARKET_DAYS,
-    marketSeed: GLOBAL_SEED,
-  };
-
-  // 归属 userId：复用 SSO 会话（与 /api/me 同逻辑），未登录用公共配额
-  let userId = "arena-public";
+  // 归属账户：复用 SSO 会话（与 /api/me 同逻辑），未登录用「anon:<ip>」独立额度
+  let user: SessionUser | null = null;
   const cookie = req.headers.get("cookie") ?? "";
   if (cookie) {
     try {
@@ -135,20 +128,63 @@ export async function POST(req: NextRequest) {
       });
       if (res.ok) {
         const data = (await res.json()) as { user: SessionUser | null };
-        if (data.user?.id) userId = data.user.id;
+        user = data.user;
       }
     } catch {
-      // 会话服务不可达时按公共配额处理
+      // 会话服务不可达时按匿名额度处理
     }
   }
+  const key = accountKey(user, ip);
 
-  const outcome = await runBacktest(input, userId);
+  // 计划权益校验：回测周期不能超过当前计划上限（Pro 500 交易日 / Free 120）
+  const plan = PLANS[peekQuota(key).plan];
+  if (s.simDays > plan.maxSimDays) {
+    return NextResponse.json(
+      {
+        code: "UPGRADE_REQUIRED",
+        error: `当前计划最长回测 ${plan.maxSimDays} 个交易日，${s.simDays} 天需升级 Pro`,
+        plan: { id: plan.id, name: plan.name, maxSimDays: plan.maxSimDays },
+        upgradeUrl: "/pricing",
+      },
+      { status: 402 }
+    );
+  }
+
+  // 配额消费：通过校验后扣减（沙箱与本地降级均消耗算力资源）
+  const quota = consumeQuota(key);
+  if (!quota.ok) {
+    return NextResponse.json(
+      {
+        code: "QUOTA_EXCEEDED",
+        error: `本月沙箱回测额度已用完（${quota.used}/${quota.limit}），升级 Pro 解锁无限回测`,
+        quota: {
+          plan: quota.plan,
+          used: quota.used,
+          limit: quota.limit === Infinity ? -1 : quota.limit,
+        },
+        upgradeUrl: "/pricing",
+      },
+      { status: 402 }
+    );
+  }
+
+  const input: BacktestInput = {
+    cfg: s.cfg,
+    simDays: s.simDays,
+    seed: s.seed,
+    tier: "Paper",
+    marketDays: MARKET_DAYS,
+    marketSeed: GLOBAL_SEED,
+  };
+
+  const outcome = await runBacktest(input, user?.id ?? "anon");
   return NextResponse.json(
     {
       engine: outcome.engine,
       runId: outcome.runId ?? null,
       note: outcome.note ?? null,
       result: outcome.result,
+      quota: { plan: quota.plan, used: quota.used, limit: quota.limit === Infinity ? -1 : quota.limit },
     },
     { headers: { "Cache-Control": "no-store" } }
   );

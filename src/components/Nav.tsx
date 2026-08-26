@@ -61,6 +61,9 @@ export function Nav() {
       <Link href="/create" className={navItemClass(pathname.startsWith("/create"))}>
         创建
       </Link>
+      <Link href="/pricing" className={navItemClass(pathname.startsWith("/pricing"))}>
+        Pro
+      </Link>
       <Link href="/me" className={navItemClass(pathname.startsWith("/me"))}>
         我的
       </Link>

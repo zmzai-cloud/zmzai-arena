@@ -50,7 +50,8 @@ const STYLE_AGGR: Record<StyleKey, number> = {
   dca: 16,
   neutral: 8,
 };
-const STYLE_SIMDAYS: Record<StyleKey, number> = {
+// 每种风格的回测周期（交易日）。超过 120 天的风格在 Free 计划下会被服务端拦截，需 Pro。
+export const STYLE_SIMDAYS: Record<StyleKey, number> = {
   momentum: 120,
   value: 252,
   breakout: 60,
@@ -214,8 +215,24 @@ interface BacktestApiResponse {
 }
 
 /**
+ * 配额/计划拦截错误：服务端 402 时抛出（前端显示升级引导），不降级本地引擎——
+ * 本地引擎虽不耗服务器算力，但会让配额形同虚设。
+ */
+export class BacktestQuotaError extends Error {
+  code: string;
+  upgradeUrl: string | null;
+  constructor(message: string, code: string, upgradeUrl: string | null = null) {
+    super(message);
+    this.name = "BacktestQuotaError";
+    this.code = code;
+    this.upgradeUrl = upgradeUrl;
+  }
+}
+
+/**
  * 调用服务端 /api/backtest：优先 zmzai-sandbox 隔离沙箱真实回测（含撮合成本），
  * 服务端已内置失败降级，此处仅做网络层兜底（接口不可达时退回本地引擎）。
+ * 注意：402（配额用尽 / 计划超限）会抛出 BacktestQuotaError，绝不静默降级。
  */
 export async function createUserAgentRemote(input: CreateAgentInput, creator: string): Promise<Agent> {
   // id = 时间戳 + 随机后缀，避免同毫秒内连建两次覆盖（Date.now() 冲突）
@@ -237,27 +254,48 @@ export async function createUserAgentRemote(input: CreateAgentInput, creator: st
     aggr: STYLE_AGGR[style],
   };
 
+  let res: Response;
   try {
-    const res = await fetch("/api/backtest", {
+    res = await fetch("/api/backtest", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ cfg, simDays, seed }),
       cache: "no-store",
     });
-    if (!res.ok) throw new Error(`回测接口 HTTP ${res.status}`);
-    const data = (await res.json()) as BacktestApiResponse;
-    return assembleAgent(input, creator, id, simDays, seed, {
-      metrics: data.result.metrics,
-      positions: data.result.positions,
-      decisions: data.result.decisions,
-      attribution: data.result.attribution,
-      robustness: data.result.robustness,
-      stress: data.result.stress,
-    }, data.engine, data.runId ?? undefined);
-  } catch (err) {
-    console.error("[arena] 沙箱回测不可用，降级本地引擎：", err);
+  } catch {
+    // 网络层不可达：降级本地引擎，保证可用性
+    console.warn("[arena] 回测接口不可达，降级本地引擎：");
     return createUserAgent(input, creator);
   }
+
+  if (res.status === 402) {
+    let code = "QUOTA_EXCEEDED";
+    let message = "本月沙箱回测额度已用完，升级 Pro 解锁无限回测";
+    let upgradeUrl: string | null = null;
+    try {
+      const err = (await res.json()) as { code?: string; error?: string; upgradeUrl?: string };
+      code = err.code ?? code;
+      message = err.error ?? message;
+      upgradeUrl = err.upgradeUrl ?? null;
+    } catch {
+      // 忽略解析失败
+    }
+    throw new BacktestQuotaError(message, code, upgradeUrl);
+  }
+  if (!res.ok) {
+    // 5xx / 其他服务端错误：服务器兜底失败，退回本地引擎
+    console.warn(`[arena] 回测接口 HTTP ${res.status}，降级本地引擎：`);
+    return createUserAgent(input, creator);
+  }
+  const data = (await res.json()) as BacktestApiResponse;
+  return assembleAgent(input, creator, id, simDays, seed, {
+    metrics: data.result.metrics,
+    positions: data.result.positions,
+    decisions: data.result.decisions,
+    attribution: data.result.attribution,
+    robustness: data.result.robustness,
+    stress: data.result.stress,
+  }, data.engine, data.runId ?? undefined);
 }
 
 // ---------- localStorage 持久化 ----------
