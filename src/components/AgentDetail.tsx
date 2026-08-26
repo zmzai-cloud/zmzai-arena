@@ -10,6 +10,7 @@ import { computeIntegrityHash } from "@/lib/integrity";
 import { useIsFollowed, toggleFollow } from "@/lib/follows";
 import type { StressStatus } from "@/sim/stress";
 import type { RobustnessLabel } from "@/sim/robustness";
+import { medalsOf, loadSeasonSnapshots, MEDAL_LABEL, medalCls } from "@/lib/season";
 
 // 验证档案页：受众是投资小白，核心动作是「验证一个 Agent 再决定要不要跟」
 export function AgentDetail({ agent }: { agent: Agent }) {
@@ -33,6 +34,12 @@ export function AgentDetail({ agent }: { agent: Agent }) {
   useEffect(() => {
     verify();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent.id]);
+
+  // 历史赛季徽章（已结算赛季的 TOP3 荣誉，跨月自动归档）
+  const [seasonMedals, setSeasonMedals] = useState<{ season: string; rank: number }[]>([]);
+  useEffect(() => {
+    setSeasonMedals(medalsOf(agent.id, loadSeasonSnapshots()));
   }, [agent.id]);
 
   // 验证报告导出（Pro 权益）：未登录/Free 时展示升级引导，Pro 直接触发服务端生成的 JSON 下载
@@ -138,6 +145,15 @@ export function AgentDetail({ agent }: { agent: Agent }) {
                 {engineBadge(agent.engine)}
               </span>
             )}
+            {seasonMedals.map((m) => (
+              <span
+                key={m.season}
+                title={`${m.season} 赛季第 ${m.rank} 名`}
+                className={`rounded px-1.5 py-0.5 text-[10.5px] font-bold ${medalCls(m.rank)}`}
+              >
+                {m.season.slice(5)}月 {MEDAL_LABEL[m.rank]}
+              </span>
+            ))}
           </div>
           <div className="mt-1 text-[13px] text-ink-2">
             by {agent.creator} · {agent.market} · {agent.style} · {agent.persona}
