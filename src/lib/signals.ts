@@ -40,6 +40,23 @@ export function tierOf(ratio: number): ConsensusTier {
 }
 
 /**
+ * 同名去重（与对决擂台同一口径）：官方优先（staticsKeys 集合判断，不依赖 id 范围），
+ * 用户副本间保留 simDays 最大者——「重新验证」产生的同名副本不重复计票。
+ */
+export function dedupeAgentsByName(agents: Agent[], official: Agent[]): Agent[] {
+  const staticsKeys = new Set(official.map((a) => `${a.name}|${a.style}`));
+  const best = new Map<string, Agent>();
+  for (const a of official) best.set(`${a.name}|${a.style}`, a);
+  for (const a of agents) {
+    const k = `${a.name}|${a.style}`;
+    const cur = best.get(k);
+    if (!cur) best.set(k, a);
+    else if (!staticsKeys.has(k) && (a.simDays ?? 0) > (cur.simDays ?? 0)) best.set(k, a);
+  }
+  return [...best.values()];
+}
+
+/**
  * 从全体 Agent 聚合共识信号，按持有数降序。
  * 只统计「至少有一个真实持仓」的 Agent（排除空仓与纯篮子仓位）。
  */

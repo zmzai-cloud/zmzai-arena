@@ -3,7 +3,7 @@ import { agents as STATIC_AGENTS } from "@/data/agents";
 import { listAllUserAgents } from "@/lib/user-agent-store";
 import { sessionFromRequest } from "@/lib/session";
 import { accountKey, getAccount } from "@/lib/billing-store";
-import { computeSignals, FREE_VISIBLE_SIGNALS, type ConsensusSignal, type SignalsResponse } from "@/lib/signals";
+import { computeSignals, dedupeAgentsByName, FREE_VISIBLE_SIGNALS, type ConsensusSignal, type SignalsResponse } from "@/lib/signals";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const acc = getAccount(accountKey(user, ip));
   const pro = acc.plan === "pro";
 
-  const all = [...STATIC_AGENTS, ...listAllUserAgents()];
+  const all = dedupeAgentsByName([...STATIC_AGENTS, ...listAllUserAgents()], STATIC_AGENTS);
   const signals = computeSignals(all);
 
   const visible = pro ? signals : signals.slice(0, FREE_VISIBLE_SIGNALS);
