@@ -186,6 +186,13 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             {reverifyState === "busy" ? "回测中…" : "⟳ 重新验证"}
           </button>
           <Link
+            href={`/battle?pick=${agent.id}`}
+            title="拉上其他策略，在同一段新行情上同场对决"
+            className="rounded bg-accent/10 px-3.5 py-2 text-[13px] font-bold text-accent transition-colors hover:bg-accent/15"
+          >
+            ⚔ 发起对决
+          </Link>
+          <Link
             href={`/create?fork=${agent.id}`}
             className="rounded bg-accent px-3.5 py-2 text-[13px] font-semibold text-accent-ink"
           >

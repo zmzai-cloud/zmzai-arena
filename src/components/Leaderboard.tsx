@@ -169,6 +169,12 @@ export function Leaderboard() {
             赛季每月自动结算，上月榜单归档后可回看
           </span>
         )}
+        <Link
+          href="/battle"
+          className="ml-auto -mb-px flex-none px-3 py-2 text-[13px] font-bold text-accent transition-colors hover:bg-accent/10"
+        >
+          对决擂台 →
+        </Link>
       </div>
 
       {viewingHistory ? (
