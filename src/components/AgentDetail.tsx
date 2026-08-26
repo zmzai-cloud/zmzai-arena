@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { agents, STRESS_SCENARIOS, type Agent } from "@/data/agents";
-import { loadUserAgents } from "@/lib/userAgents";
+import { loadUserAgents, saveUserAgent, reverifyAgentRemote, BacktestQuotaError } from "@/lib/userAgents";
 import { fmtPct, riskColor, tierBadge, tierDesc, engineBadge, engineCls } from "@/lib/format";
 import { computeIntegrityHash } from "@/lib/integrity";
 import { useIsFollowed, toggleFollow } from "@/lib/follows";
@@ -78,6 +78,25 @@ export function AgentDetail({ agent }: { agent: Agent }) {
     }
   };
 
+  // 重新验证：按存档配置在沙箱重跑一次（每次消耗一次回测配额），产物为「我」的用户副本
+  const [reverifyState, setReverifyState] = useState<"idle" | "busy" | "need-pro">("idle");
+  const reverify = async () => {
+    if (!agent.cfg || reverifyState === "busy") return;
+    setReverifyState("busy");
+    try {
+      const copy = await reverifyAgentRemote(agent);
+      saveUserAgent(copy);
+      router.push(`/agents/${copy.id}`);
+    } catch (e) {
+      if (e instanceof BacktestQuotaError) {
+        // 配额用尽 / 计划超限：展示升级引导（绝不静默降级，配额才有意义）
+        setReverifyState("need-pro");
+      } else {
+        setReverifyState("idle");
+      }
+    }
+  };
+
   return (
     <div>
       <button
@@ -142,6 +161,14 @@ export function AgentDetail({ agent }: { agent: Agent }) {
           >
             {exportState === "busy" ? "导出中…" : "⇩ 导出报告"}
           </button>
+          <button
+            onClick={reverify}
+            disabled={reverifyState === "busy" || !agent.cfg}
+            title={agent.cfg ? "按存档配置在当前行情重跑一次（消耗 1 次回测配额）" : "该策略无存档配置，无法重新验证"}
+            className="rounded border border-accent/50 px-3.5 py-2 text-[13px] font-semibold text-accent transition-colors hover:bg-accent/10 disabled:opacity-40"
+          >
+            {reverifyState === "busy" ? "回测中…" : "⟳ 重新验证"}
+          </button>
           <Link
             href={`/create?fork=${agent.id}`}
             className="rounded bg-accent px-3.5 py-2 text-[13px] font-semibold text-accent-ink"
@@ -152,6 +179,14 @@ export function AgentDetail({ agent }: { agent: Agent }) {
         {exportState === "need-pro" && (
           <div className="mt-3 flex w-full flex-wrap items-center gap-x-2 gap-y-1 border border-warning/40 bg-warning/10 px-3.5 py-2 text-[12.5px] text-warning">
             <span>验证报告导出为 Pro 权益（JSON 留档，含时间戳与来源声明）</span>
+            <Link href="/pricing" className="font-semibold underline underline-offset-2">
+              查看 Pro 权益 →
+            </Link>
+          </div>
+        )}
+        {reverifyState === "need-pro" && (
+          <div className="mt-3 flex w-full flex-wrap items-center gap-x-2 gap-y-1 border border-warning/40 bg-warning/10 px-3.5 py-2 text-[12.5px] text-warning">
+            <span>回测额度已用完（Free 每月 3 次沙箱回测），升级 Pro 解锁无限回测</span>
             <Link href="/pricing" className="font-semibold underline underline-offset-2">
               查看 Pro 权益 →
             </Link>

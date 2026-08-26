@@ -114,6 +114,22 @@ function buildStress(id: number, simDays: number, seed: number, cfg: StrategyCon
 
 // ---------- 核心：由表单输入创建一个智能体 ----------
 
+/** 由表单输入重建策略配置（与官方 Agent 同档风控参数），同时作为档案存档供重新验证 */
+function buildCfg(input: CreateAgentInput, id: number): StrategyConfig {
+  const universe = input.universe.filter((c) => INSTRUMENT_MAP[c]);
+  return {
+    id,
+    style: input.style,
+    universe,
+    maxSingle: input.maxSingle,
+    minCash: input.minCash,
+    maxPositions: Math.max(1, Math.min(6, universe.length)),
+    stopDD: input.stopDD,
+    rebalance: Math.max(1, Math.round(input.rebalance)),
+    aggr: STYLE_AGGR[input.style],
+  };
+}
+
 /** 回测结果的统一契约（本地引擎 / 沙箱返回同构） */
 interface BacktestParts {
   metrics: Metrics;
@@ -124,11 +140,15 @@ interface BacktestParts {
   stress: Record<string, AgentStress>;
 }
 
-/** 由回测产物组装 Agent（本地与沙箱路径共用，保证字段口径一致） */
-function assembleAgent(input: CreateAgentInput, creator: string, id: number, simDays: number, seed: number, parts: BacktestParts, engine: Agent["engine"], sandboxRunId?: string): Agent {
+/**
+ * 由回测产物组装 Agent（本地与沙箱路径共用，保证字段口径一致）。
+ * cfgOverride：重新验证时传入原存档配置，保证与档案基准完全同参重跑。
+ */
+function assembleAgent(input: CreateAgentInput, creator: string, id: number, simDays: number, seed: number, parts: BacktestParts, engine: Agent["engine"], sandboxRunId?: string, cfgOverride?: StrategyConfig): Agent {
   const style = input.style;
   const universe = input.universe.filter((c) => INSTRUMENT_MAP[c]);
   const marketLabel = universe.length ? INSTRUMENT_MAP[universe[0]]?.market ?? "A股" : "A股";
+  const cfg = cfgOverride ?? buildCfg(input, id);
 
   const a: Agent = {
     id,
@@ -160,6 +180,8 @@ function assembleAgent(input: CreateAgentInput, creator: string, id: number, sim
     stress: parts.stress,
     engine,
     ...(sandboxRunId ? { sandboxRunId } : {}),
+    cfg, // 完整策略配置存档：详情页可一键重新验证
+    simDays, // 引擎模拟天数（重验证基准周期）
   };
   a.integrityHash = computeIntegrityHash(a);
   return a;
@@ -169,21 +191,10 @@ export function createUserAgent(input: CreateAgentInput, creator: string): Agent
   // id = 时间戳 + 随机后缀，避免同毫秒内连建两次覆盖（Date.now() 冲突）
   const id = Date.now() + Math.floor(Math.random() * 1_000_000);
   const style = input.style;
-  const universe = input.universe.filter((c) => INSTRUMENT_MAP[c]);
   const simDays = STYLE_SIMDAYS[style];
   const seed = 20260825 + (id % 100000) + Math.floor(Math.random() * 100000);
 
-  const cfg: StrategyConfig = {
-    id,
-    style,
-    universe,
-    maxSingle: input.maxSingle,
-    minCash: input.minCash,
-    maxPositions: Math.max(1, Math.min(6, universe.length)),
-    stopDD: input.stopDD,
-    rebalance: Math.max(1, Math.round(input.rebalance)),
-    aggr: STYLE_AGGR[style],
-  };
+  const cfg: StrategyConfig = buildCfg(input, id);
 
   const res = runSimulation(cfg, market, simDays, seed, "Paper" as SimTier);
   const stress = buildStress(id, simDays, seed, cfg);
@@ -242,17 +253,7 @@ export async function createUserAgentRemote(input: CreateAgentInput, creator: st
   const simDays = STYLE_SIMDAYS[style];
   const seed = 20260825 + (id % 100000) + Math.floor(Math.random() * 100000);
 
-  const cfg: StrategyConfig = {
-    id,
-    style,
-    universe,
-    maxSingle: input.maxSingle,
-    minCash: input.minCash,
-    maxPositions: Math.max(1, Math.min(6, universe.length)),
-    stopDD: input.stopDD,
-    rebalance: Math.max(1, Math.round(input.rebalance)),
-    aggr: STYLE_AGGR[style],
-  };
+  const cfg: StrategyConfig = buildCfg(input, id);
 
   let res: Response;
   try {
@@ -296,6 +297,119 @@ export async function createUserAgentRemote(input: CreateAgentInput, creator: st
     robustness: data.result.robustness,
     stress: data.result.stress,
   }, data.engine, data.runId ?? undefined);
+}
+
+// ---------- 重新验证：按档案存档配置在沙箱重跑（每次消耗一次回测配额） ----------
+
+/** 从 Agent 存档重建表单输入（重验证复用组装管线，名称/人设/护栏原样保留） */
+function inputFromAgent(agent: Agent): CreateAgentInput {
+  const cfg = agent.cfg!;
+  return {
+    emoji: agent.emoji,
+    name: agent.name,
+    persona: agent.persona,
+    universe: cfg.universe,
+    style: cfg.style,
+    maxSingle: cfg.maxSingle,
+    minCash: cfg.minCash,
+    stopDD: cfg.stopDD,
+    rebalance: cfg.rebalance,
+    prompt: agent.prompt,
+    slogan: agent.slogan,
+  };
+}
+
+/**
+ * 重新验证：按 Agent 存档的完整策略配置重跑回测（全新随机行情种子），
+ * 产物为「我」的用户副本（新 id），与档案基准同参对照，可判断策略是否仍成立。
+ * 官方与用户 Agent 均可重验；每次消耗一次回测配额（Free 3 次/月，Pro 无限）。
+ * 402（配额用尽 / 计划超限）抛 BacktestQuotaError，调用方展示升级引导，绝不静默降级。
+ */
+export async function reverifyAgentRemote(agent: Agent): Promise<Agent> {
+  if (!agent.cfg) throw new Error("该 Agent 无存档策略配置，无法重新验证");
+  // 副本 id：时间戳 + 随机后缀，避免覆盖
+  const id = Date.now() + Math.floor(Math.random() * 1_000_000);
+  // 重验证基准周期：官方 Agent 的 simDays 与展示 days 解耦，必须按引擎周期重跑才与档案可比
+  const simDays = agent.simDays ?? agent.days;
+  const seed = 20260825 + (id % 100000) + Math.floor(Math.random() * 100000);
+
+  let res: Response;
+  try {
+    res = await fetch("/api/backtest", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cfg: agent.cfg, simDays, seed }),
+      cache: "no-store",
+    });
+  } catch {
+    // 网络层不可达：退回本地引擎重跑（同一份源码），可用性优先
+    console.warn("[arena] 重新验证接口不可达，降级本地引擎：");
+    return reverifyLocal(agent, id, simDays, seed);
+  }
+
+  if (res.status === 402) {
+    let code = "QUOTA_EXCEEDED";
+    let message = "本月沙箱回测额度已用完，升级 Pro 解锁无限回测";
+    let upgradeUrl: string | null = null;
+    try {
+      const err = (await res.json()) as { code?: string; error?: string; upgradeUrl?: string };
+      code = err.code ?? code;
+      message = err.error ?? message;
+      upgradeUrl = err.upgradeUrl ?? null;
+    } catch {
+      // 忽略解析失败
+    }
+    throw new BacktestQuotaError(message, code, upgradeUrl);
+  }
+  if (!res.ok) {
+    // 5xx / 其他服务端错误：服务器兜底失败，退回本地引擎
+    console.warn(`[arena] 重新验证接口 HTTP ${res.status}，降级本地引擎：`);
+    return reverifyLocal(agent, id, simDays, seed);
+  }
+  const data = (await res.json()) as BacktestApiResponse;
+  return assembleAgent(
+    inputFromAgent(agent),
+    "我", // 复验产物归属当前用户（官方 Agent 的重验副本不再是官方档案）
+    id,
+    simDays,
+    seed,
+    {
+      metrics: data.result.metrics,
+      positions: data.result.positions,
+      decisions: data.result.decisions,
+      attribution: data.result.attribution,
+      robustness: data.result.robustness,
+      stress: data.result.stress,
+    },
+    data.engine,
+    data.runId ?? undefined,
+    agent.cfg // 原存档配置原样保留（含用户微调参数），与档案基准完全同参
+  );
+}
+
+/** 本地引擎重跑（网络降级路径）：与创建流程同款管线 */
+function reverifyLocal(agent: Agent, id: number, simDays: number, seed: number): Agent {
+  const cfg = agent.cfg!;
+  const res = runSimulation(cfg, market, simDays, seed, "Paper" as SimTier);
+  const stress = buildStress(id, simDays, seed, cfg);
+  return assembleAgent(
+    inputFromAgent(agent),
+    "我",
+    id,
+    simDays,
+    seed,
+    {
+      metrics: res.metrics,
+      positions: res.positions,
+      decisions: res.decisions,
+      attribution: attributeReturn(res, market, cfg, simDays, "Paper", seed),
+      robustness: certifyRobustness(market, cfg, simDays, "Paper", seed),
+      stress,
+    },
+    "local",
+    undefined,
+    cfg
+  );
 }
 
 // ---------- localStorage 持久化 ----------

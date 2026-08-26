@@ -59,6 +59,54 @@ pnpm build    # 生产构建
 
 > 需要环境变量：`SANDBOX_URL=https://z.zmzai.cloud`、`SANDBOX_AGENT_SERVICE_SECRET=<与 sandbox 生产一致的服务密钥>`。未配置时回测自动降级本地引擎，功能不受影响。
 
+## 商业化与计费（Free / Pro）
+
+产品按订阅制收费：**Free**（¥0）与 **Pro**（¥29/月 · ¥198/年）。回测（沙箱算力）是核心计费资源：
+
+| 权益 | Free | Pro |
+| --- | --- | --- |
+| 沙箱回测配额 | 每月 3 次（滚动 30 天窗口） | 无限 |
+| 最长回测周期 | 120 交易日 | 500 交易日 |
+| 私有策略 / Fork | ✅ | ✅ |
+| 验证报告导出（JSON 留档） | — | ✅ |
+| 优先队列 | — | ✅ |
+
+配额由服务端 `src/lib/billing-store.ts` 强制拦截（`/api/backtest` 双 402：计划超限 / 配额用尽），客户端收到 402 绝不降级本地引擎，配额才有意义。
+
+### 环境变量
+
+```bash
+# 计费账本持久化目录（部署目录之外，跨版本保留；进程用户需可写）
+ARENA_DATA_DIR=/opt/zmzai/arena-data
+
+# grant 内测发放密钥（curl 用法见下方）
+BILLING_ADMIN_SECRET=<随机长字符串>
+
+# Paddle 支付（可选）：不配置时 /api/billing/upgrade 诚实降级「内测发放」，不展示假支付
+PADDLE_VENDOR_ID=
+PADDLE_API_KEY=
+PADDLE_WEBHOOK_SECRET=
+PADDLE_SANDBOX=false
+```
+
+### 内测发放（未接入支付时）
+
+```bash
+curl -X POST https://arena.zmzai.cloud/api/billing/grant \
+  -H "Authorization: Bearer $BILLING_ADMIN_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"account": "anon:<客户端IP>", "plan": "pro", "durationDays": 30}'
+# 登录用户用 account="user:<id>"（SSO 用户 id 可通过 /api/me 查询）
+```
+
+### 定价调整
+
+金额 / 周期 / 权益在 `src/lib/billing.ts` 的 `PLANS` 与 `PRICES` 常量；定价页文案在 `app/pricing/page.tsx`。
+
+### 重新验证（配额持续消耗场景）
+
+每个 Agent（官方 / 用户）详情页有「⟳ 重新验证」：按存档完整策略配置（`cfg`）在沙箱用新行情种子重跑一次，每次消耗一次回测配额；产物为「我」的用户副本（新 id、新 Run ID），与档案基准同参对照，判断策略是否仍成立。
+
 ## 后续接入（见路线图 P3~P5）
 
 - ✅ **真实回测与撮合**：创建智能体已接入 `zmzai-sandbox` 隔离沙箱回测（见上文执行链路），官方 Agent 数据由同一引擎生成。

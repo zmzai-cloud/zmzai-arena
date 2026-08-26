@@ -5,7 +5,7 @@
 // 未来可把策略执行这一步替换为真实 zmzai-sandbox 调用，数据契约不变。
 
 import { generateMarket, INSTRUMENT_MAP } from "@/sim/market";
-import { STRATEGIES } from "@/sim/strategies";
+import { STRATEGIES, type StrategyConfig } from "@/sim/strategies";
 import { runSimulation, type Tier as SimTier, type RawDecision } from "@/sim/engine";
 import { type RiskPillar } from "@/sim/metrics";
 import { attributeReturn, type Attribution } from "@/sim/attribution";
@@ -65,6 +65,8 @@ export interface Agent {
   stress: Record<string, AgentStress>; // 黑天鹅压力测试：每场景受压结果（key=scenarioId）
   engine?: "sandbox" | "local"; // 回测执行环境：sandbox=zmzai-sandbox 隔离沙箱真实回测；local/缺省=浏览器或服务端本地引擎
   sandboxRunId?: string; // 沙箱回测的运行 ID（可追溯审计）
+  cfg?: StrategyConfig; // 完整策略配置：详情页可一键重新验证（每次消耗一次回测配额）
+  simDays?: number; // 引擎模拟天数：与展示 days 解耦，重新验证按此周期重跑（保证与档案基准可比）
 }
 
 // 全市场行情只生成一次（确定性种子），所有智能体共用同一段可复现行情
@@ -390,6 +392,8 @@ export const agents: Agent[] = META.map((m) => {
     log: res.decisions.map((r) => toDecision(r, m)).slice(-12),
     stress: stressFor(m.id),
     engine: "local", // 官方基准：平台本地引擎（与沙箱同一份源码、含撮合成本），非隔离沙箱执行
+    cfg, // 官方 Agent 同样可重新验证（结果在沙箱中重跑，与档案基准对照）
+    simDays: m.simDays, // 引擎模拟天数（重验证基准周期）
   };
   a.integrityHash = computeIntegrityHash(a);
   return a;
