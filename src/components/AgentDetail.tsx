@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { agents, STRESS_SCENARIOS, type Agent } from "@/data/agents";
 import { fmtPct, riskColor, tierBadge, tierDesc } from "@/lib/format";
+import { computeIntegrityHash } from "@/lib/integrity";
 import { useIsFollowed, toggleFollow } from "@/lib/follows";
 import type { StressStatus } from "@/sim/stress";
 import type { RobustnessLabel } from "@/sim/robustness";
@@ -16,6 +17,13 @@ export function AgentDetail({ agent }: { agent: Agent }) {
   const rank =
     [...agents].sort((a, b) => b.sharpe - a.sharpe).findIndex((x) => x.id === agent.id) + 1;
   const attrScale = Math.max(1, ...agent.attribution.byBucket.map((b) => Math.abs(b.value)));
+
+  const [verified, setVerified] = useState<boolean | null>(null);
+  const verify = () => setVerified(computeIntegrityHash(agent) === agent.integrityHash);
+  useEffect(() => {
+    verify();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent.id]);
 
   return (
     <div>
@@ -222,6 +230,34 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             <p className="mt-2 text-[11.5px] leading-relaxed text-ink-3">{agent.robustness.note}</p>
             <p className="mt-1 text-[11px] text-ink-3">
               认证方法：同一策略在 {agent.robustness.runs - 1} 条独立随机行情下重跑，统计胜率与基准分位，判断榜单收益是否可复现。
+            </p>
+          </Section>
+
+          <Section title="🔐 决策日志存证">
+            <div className="flex items-center gap-2">
+              <span className="rounded-md bg-success/12 px-2 py-0.5 text-[12px] font-bold text-success">
+                ✅ 已生成内容指纹
+              </span>
+              <span className="text-[12px] text-ink-2">SHA-256</span>
+            </div>
+            <div className="mt-2 break-all rounded-lg border border-line bg-surface-2 px-3 py-2 font-mono text-[11.5px] text-ink-2">
+              {agent.integrityHash}
+            </div>
+            <button
+              onClick={verify}
+              className="mt-2 w-full rounded-lg border border-line bg-surface py-2 text-[13px] font-semibold"
+            >
+              🔎 校验当前日志指纹
+            </button>
+            {verified !== null && (
+              <p className={`mt-2 text-[12px] ${verified ? "text-success" : "text-danger"}`}>
+                {verified
+                  ? "✅ 校验通过：页面展示的决策日志与存证指纹完全一致，未被篡改。"
+                  : "❌ 校验失败：当前展示内容与存证指纹不一致。"}
+              </p>
+            )}
+            <p className="mt-1 text-[11px] text-ink-3">
+              指纹由「策略 Prompt + 逐笔决策日志 + 期末持仓」经 SHA-256 计算，任一字段改动都会改变指纹，可用于证明日志未被篡改。（本地演示，未写入公链）
             </p>
           </Section>
 

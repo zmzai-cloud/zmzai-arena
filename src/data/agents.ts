@@ -10,6 +10,7 @@ import { runSimulation, type Tier as SimTier, type RawDecision } from "@/sim/eng
 import { type RiskPillar } from "@/sim/metrics";
 import { attributeReturn, type Attribution } from "@/sim/attribution";
 import { certifyRobustness, type RobustnessCert } from "@/sim/robustness";
+import { computeIntegrityHash } from "@/lib/integrity";
 import {
   runStressTest,
   STRESS_SCENARIOS,
@@ -52,6 +53,7 @@ export interface Agent {
   riskBreakdown: RiskPillar[]; // 统一风险分构成（5 支柱）
   attribution: Attribution; // 收益归因（基准β/行业/选股/择时 + 运气占比）
   robustness: RobustnessCert; // 反过拟合认证（跨随机行情稳定性标签）
+  integrityHash: string; // 决策日志存证：SHA-256 内容指纹（Prompt+日志+持仓）
   days: number;
   followers: number;
   slogan: string;
@@ -359,7 +361,7 @@ function stressFor(agentId: number): Record<string, AgentStress> {
 export const agents: Agent[] = META.map((m) => {
   const cfg = STRATEGIES.find((s) => s.id === m.id)!;
   const res = runSimulation(cfg, market, m.simDays, m.seed, m.tier as SimTier);
-  return {
+  const a: Agent = {
     id: m.id,
     emoji: m.emoji,
     name: m.name,
@@ -375,6 +377,7 @@ export const agents: Agent[] = META.map((m) => {
     riskBreakdown: res.metrics.riskBreakdown,
     attribution: attributeReturn(res, market, cfg, m.simDays, m.tier as SimTier, m.seed),
     robustness: certifyRobustness(market, cfg, m.simDays, m.tier as SimTier, m.seed),
+    integrityHash: "",
     days: m.days,
     followers: m.followers,
     slogan: m.slogan,
@@ -385,6 +388,8 @@ export const agents: Agent[] = META.map((m) => {
     log: res.decisions.map((r) => toDecision(r, m)).slice(-12),
     stress: stressFor(m.id),
   };
+  a.integrityHash = computeIntegrityHash(a);
+  return a;
 });
 
 export function getAgent(id: number): Agent | undefined {

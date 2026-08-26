@@ -10,6 +10,7 @@ import { runSimulation, type RawDecision, type Tier as SimTier } from "@/sim/eng
 import { stressForConfig, type AgentStress, type SimSpec } from "@/sim/stress";
 import { attributeReturn, type Attribution } from "@/sim/attribution";
 import { certifyRobustness, type RobustnessCert } from "@/sim/robustness";
+import { computeIntegrityHash } from "@/lib/integrity";
 import { type Agent, type Decision, market, agents as STATIC_AGENTS } from "@/data/agents";
 import { type StrategyConfig, type StyleKey } from "@/sim/strategies";
 
@@ -134,7 +135,7 @@ export function createUserAgent(input: CreateAgentInput, creator: string): Agent
   const stress = buildStress(id, simDays, seed, cfg);
   const marketLabel = universe.length ? INSTRUMENT_MAP[universe[0]]?.market ?? "A股" : "A股";
 
-  return {
+  const a: Agent = {
     id,
     emoji: input.emoji || "🤖",
     name: input.name.trim() || "无名策略",
@@ -150,6 +151,7 @@ export function createUserAgent(input: CreateAgentInput, creator: string): Agent
     riskBreakdown: res.metrics.riskBreakdown,
     attribution: attributeReturn(res, market, cfg, simDays, "Paper", seed),
     robustness: certifyRobustness(market, cfg, simDays, "Paper", seed),
+    integrityHash: "",
     days: simDays,
     followers: 0,
     slogan: input.slogan?.trim() || `${input.name} · 用户策略`,
@@ -162,6 +164,8 @@ export function createUserAgent(input: CreateAgentInput, creator: string): Agent
     log: res.decisions.map((r) => toDecision(r, simDays)).slice(-12),
     stress,
   };
+  a.integrityHash = computeIntegrityHash(a);
+  return a;
 }
 
 // ---------- localStorage 持久化 ----------
