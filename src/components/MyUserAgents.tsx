@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { type Agent } from "@/data/agents";
 import { loadUserAgents, deleteUserAgent } from "@/lib/userAgents";
-import { fmtPct, engineBadge } from "@/lib/format";
+import { fmtPct, engineBadge, engineCls } from "@/lib/format";
 
 export function MyUserAgents() {
   const [list, setList] = useState<Agent[]>([]);
@@ -38,8 +38,8 @@ export function MyUserAgents() {
               <Link href={`/agents/${a.id}`} className="font-bold hover:text-accent">
                 {a.name}
               </Link>
-              {a.engine === "sandbox" && (
-                <span className="ml-1.5 rounded-md bg-accent/10 px-1.5 py-0.5 text-[10.5px] font-bold text-accent">
+              {a.engine && (
+                <span className={`ml-1.5 rounded-md px-1.5 py-0.5 text-[10.5px] font-bold ${engineCls(a.engine)}`}>
                   {engineBadge(a.engine)}
                 </span>
               )}
@@ -50,6 +50,7 @@ export function MyUserAgents() {
             </div>
             <button
               onClick={() => {
+                if (!window.confirm(`确定删除「${a.name}」？删除后不可恢复。`)) return;
                 deleteUserAgent(a.id);
                 setList(loadUserAgents());
               }}

@@ -389,6 +389,7 @@ export const agents: Agent[] = META.map((m) => {
     positions: res.positions,
     log: res.decisions.map((r) => toDecision(r, m)).slice(-12),
     stress: stressFor(m.id),
+    engine: "local", // 官方基准：平台本地引擎（与沙箱同一份源码、含撮合成本），非隔离沙箱执行
   };
   a.integrityHash = computeIntegrityHash(a);
   return a;

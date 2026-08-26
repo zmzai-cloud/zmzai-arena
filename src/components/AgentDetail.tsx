@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { agents, STRESS_SCENARIOS, type Agent } from "@/data/agents";
-import { fmtPct, riskColor, tierBadge, tierDesc, engineBadge } from "@/lib/format";
+import { loadUserAgents } from "@/lib/userAgents";
+import { fmtPct, riskColor, tierBadge, tierDesc, engineBadge, engineCls } from "@/lib/format";
 import { computeIntegrityHash } from "@/lib/integrity";
 import { useIsFollowed, toggleFollow } from "@/lib/follows";
 import type { StressStatus } from "@/sim/stress";
@@ -14,8 +15,11 @@ export function AgentDetail({ agent }: { agent: Agent }) {
   const router = useRouter();
   const followed = useIsFollowed(agent.id);
   const tb = tierBadge(agent.tier);
+  // 排名：官方 + 用户 Agent 合并排序（用户创建的 Agent 不在静态 agents 里）
   const rank =
-    [...agents].sort((a, b) => b.sharpe - a.sharpe).findIndex((x) => x.id === agent.id) + 1;
+    [...agents, ...loadUserAgents()]
+      .sort((a, b) => b.sharpe - a.sharpe)
+      .findIndex((x) => x.id === agent.id) + 1;
   const attrScale = Math.max(1, ...agent.attribution.byBucket.map((b) => Math.abs(b.value)));
 
   const [verified, setVerified] = useState<boolean | null>(null);
@@ -27,7 +31,13 @@ export function AgentDetail({ agent }: { agent: Agent }) {
 
   return (
     <div>
-      <button onClick={() => router.back()} className="mt-5 font-semibold text-accent">
+      <button
+        onClick={() => {
+          if (window.history.length > 1) router.back();
+          else router.push("/");
+        }}
+        className="mt-5 font-semibold text-accent"
+      >
         ← 返回排行榜
       </button>
 
@@ -54,7 +64,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             {followed ? "✔ 已关注" : "+ 关注"} ({agent.followers + (followed ? 1 : 0)})
           </button>
           <Link
-            href="/create"
+            href={`/create?fork=${agent.id}`}
             className="rounded-lg bg-accent px-3 py-2 text-[13px] font-semibold text-accent-ink"
           >
             ⑂ Fork 策略
@@ -291,8 +301,8 @@ export function AgentDetail({ agent }: { agent: Agent }) {
               <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${tb.className}`}>
                 {tb.label}
               </span>
-              {agent.engine === "sandbox" && (
-                <span className="ml-1 rounded-md bg-accent/10 px-2 py-0.5 text-[11px] font-bold text-accent">
+              {agent.engine && (
+                <span className={`ml-1 rounded-md px-2 py-0.5 text-[11px] font-bold ${engineCls(agent.engine)}`}>
                   {engineBadge(agent.engine)}
                 </span>
               )}
@@ -309,13 +319,19 @@ export function AgentDetail({ agent }: { agent: Agent }) {
                   结果可复现、可审计{agent.sandboxRunId ? `（Run ${agent.sandboxRunId}）` : ""}。
                 </div>
               )}
+              {agent.engine === "local" && (
+                <div className="mt-1">
+                  <b>回测环境：</b>由平台本地引擎生成（与沙箱同一份源码，成交同样含手续费 / 滑点 / 涨跌停约束），
+                  结果可复现；沙箱可用时新创建的策略将升级为隔离沙箱回测。
+                </div>
+              )}
             </div>
-            <button
-              className="mt-3.5 w-full rounded-lg border border-line bg-surface py-2.5 text-[13px] font-semibold"
-              onClick={() => alert(`Fork ${agent.name} 策略`)}
+            <Link
+              href={`/create?fork=${agent.id}`}
+              className="mt-3.5 block w-full rounded-lg border border-line bg-surface py-2.5 text-center text-[13px] font-semibold"
             >
               ⑂ Fork 这个策略
-            </button>
+            </Link>
           </Section>
 
           <Section title="🌪 黑天鹅抗压">

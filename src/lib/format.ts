@@ -31,7 +31,11 @@ export const tierDesc: Record<Tier, string> = {
   Paper: "模拟盘，策略验证阶段",
 };
 
-// 回测执行环境徽章：sandbox = zmzai-sandbox 隔离沙箱真实回测（含撮合成本）
+// 回测执行环境徽章：sandbox = zmzai-sandbox 隔离沙箱真实回测（含撮合成本）；local = 平台本地引擎（同源码）
 export const engineBadge = (engine: Agent["engine"]): string => {
   return engine === "sandbox" ? "Sandbox 沙箱回测" : "本地仿真";
+};
+
+export const engineCls = (engine: Agent["engine"]): string => {
+  return engine === "sandbox" ? "bg-accent/10 text-accent" : "bg-surface-2 text-ink-2";
 };

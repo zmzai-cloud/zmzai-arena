@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { stressResults, STRESS_SCENARIOS, agents } from "@/data/agents";
+import { stressResults, STRESS_SCENARIOS, agents, type Agent } from "@/data/agents";
+import { loadUserAgents } from "@/lib/userAgents";
 import { fmtPct } from "@/lib/format";
-import type { StressStatus } from "@/sim/stress";
+import type { AgentStress, StressStatus } from "@/sim/stress";
 
 const statusCls = (s: StressStatus): string => {
   switch (s) {
@@ -19,17 +20,42 @@ const statusCls = (s: StressStatus): string => {
   }
 };
 
-const nameOf = (id: number) => agents.find((a) => a.id === id)?.name ?? `#${id}`;
-const emojiOf = (id: number) => agents.find((a) => a.id === id)?.emoji ?? "🤖";
-const marketOf = (id: number) => agents.find((a) => a.id === id)?.market ?? "";
-const styleOf = (id: number) => agents.find((a) => a.id === id)?.style ?? "";
-
 export function StressTest() {
   const [sel, setSel] = useState(STRESS_SCENARIOS[0].id);
-  const result = useMemo(
-    () => stressResults.find((r) => r.scenario.id === sel)!,
-    [sel]
-  );
+  const [userAgents, setUserAgents] = useState<Agent[]>([]);
+  useEffect(() => setUserAgents(loadUserAgents()), []);
+
+  // 官方 stressResults（模块级静态）+ 用户创建的 Agent（localStorage）合并为同一张表
+  const userMap = useMemo(() => new Map(userAgents.map((a) => [a.id, a])), [userAgents]);
+  const allAgents = useMemo(() => [...agents, ...userAgents], [userAgents]);
+
+  const byScenario = useMemo(() => {
+    const map = new Map<string, AgentStress[]>();
+    for (const r of stressResults) map.set(r.scenario.id, [...r.agents]);
+    for (const ua of userAgents) {
+      for (const scn of STRESS_SCENARIOS) {
+        const s = ua.stress[scn.id];
+        if (s) (map.get(scn.id) ?? map.set(scn.id, []).get(scn.id)!).push(s);
+      }
+    }
+    for (const list of map.values()) list.sort((a, b) => b.totalReturn - a.totalReturn);
+    return map;
+  }, [userAgents]);
+
+  const result = useMemo(() => {
+    const rows = byScenario.get(sel) ?? [];
+    return {
+      scenario: stressResults.find((r) => r.scenario.id === sel)!.scenario,
+      agents: rows,
+      total: rows.length,
+      survivedCount: rows.filter((a) => a.survived).length,
+    };
+  }, [sel, byScenario]);
+
+  const nameOf = (id: number) => allAgents.find((a) => a.id === id)?.name ?? `#${id}`;
+  const emojiOf = (id: number) => allAgents.find((a) => a.id === id)?.emoji ?? "🤖";
+  const marketOf = (id: number) => allAgents.find((a) => a.id === id)?.market ?? "";
+  const styleOf = (id: number) => allAgents.find((a) => a.id === id)?.style ?? "";
 
   const blown = result.agents.filter((a) => a.status === "爆仓").length;
   const resilient = result.agents.filter((a) => a.status === "稳健").length;
@@ -55,7 +81,7 @@ export function StressTest() {
       {/* 场景选择 */}
       <div className="mt-3 flex flex-wrap gap-2">
         {STRESS_SCENARIOS.map((scn) => {
-          const r = stressResults.find((x) => x.scenario.id === scn.id)!;
+          const rows = byScenario.get(scn.id) ?? [];
           const active = scn.id === sel;
           return (
             <button
@@ -70,7 +96,7 @@ export function StressTest() {
               <div className="font-bold">{scn.name}</div>
               <div className="text-[11.5px] text-ink-2">{scn.period}</div>
               <div className="mt-0.5 text-[11.5px] text-ink-2">
-                存活 {r.survivedCount}/{r.total}
+                存活 {rows.filter((a) => a.survived).length}/{rows.length}
               </div>
             </button>
           );
@@ -95,7 +121,7 @@ export function StressTest() {
           <tbody>
             {result.agents.map((a, i) => (
               <tr
-                key={a.agentId}
+                key={`${a.agentId}-${a.scenarioId}`}
                 className="border-b border-line/70 transition-colors last:border-0 hover:bg-surface-2"
               >
                 <td className="px-3.5 py-3 font-bold text-ink-2">{i + 1}</td>
@@ -103,6 +129,11 @@ export function StressTest() {
                   <Link href={`/agents/${a.agentId}`} className="flex items-center gap-2.5">
                     <span className="text-[18px]">{emojiOf(a.agentId)}</span>
                     <span className="font-bold">{nameOf(a.agentId)}</span>
+                    {userMap.has(a.agentId) && (
+                      <span className="rounded-md bg-accent/10 px-1.5 py-0.5 text-[10.5px] font-bold text-accent">
+                        用户
+                      </span>
+                    )}
                   </Link>
                 </td>
                 <td className="px-3.5 py-3 text-ink-2">

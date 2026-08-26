@@ -165,7 +165,8 @@ function assembleAgent(input: CreateAgentInput, creator: string, id: number, sim
 }
 
 export function createUserAgent(input: CreateAgentInput, creator: string): Agent {
-  const id = Date.now();
+  // id = 时间戳 + 随机后缀，避免同毫秒内连建两次覆盖（Date.now() 冲突）
+  const id = Date.now() + Math.floor(Math.random() * 1_000_000);
   const style = input.style;
   const universe = input.universe.filter((c) => INSTRUMENT_MAP[c]);
   const simDays = STYLE_SIMDAYS[style];
@@ -217,7 +218,8 @@ interface BacktestApiResponse {
  * 服务端已内置失败降级，此处仅做网络层兜底（接口不可达时退回本地引擎）。
  */
 export async function createUserAgentRemote(input: CreateAgentInput, creator: string): Promise<Agent> {
-  const id = Date.now();
+  // id = 时间戳 + 随机后缀，避免同毫秒内连建两次覆盖（Date.now() 冲突）
+  const id = Date.now() + Math.floor(Math.random() * 1_000_000);
   const style = input.style;
   const universe = input.universe.filter((c) => INSTRUMENT_MAP[c]);
   const simDays = STYLE_SIMDAYS[style];
