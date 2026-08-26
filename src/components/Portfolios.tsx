@@ -56,6 +56,8 @@ export function Portfolios() {
   }, [followId, isPro, byId, followCap, router]);
 
   const maxAllowed = isPro ? PRO_MAX_PORTFOLIOS : FREE_MAX_PORTFOLIOS;
+  // 只统计可渲染组合：agentId 无效的云端脏数据不占名额、不计数（防御性过滤）
+  const valid = portfolios.filter((p) => byId.has(p.agentId));
 
   if (isPro === null) {
     return <div className="py-10 text-center text-[13px] text-ink-3">组合加载中…</div>;
@@ -71,7 +73,7 @@ export function Portfolios() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-[13px] text-ink-2">
-          已跟 <span className="font-bold text-ink">{portfolios.length}</span> / {maxAllowed} 个 AI
+          已跟 <span className="font-bold text-ink">{valid.length}</span> / {maxAllowed} 个 AI
           {!isPro && "（免费限 1 个）"}
         </div>
         <Link
@@ -82,7 +84,7 @@ export function Portfolios() {
         </Link>
       </div>
 
-      {portfolios.length === 0 ? (
+      {valid.length === 0 ? (
         <div className="rounded border border-dashed border-line bg-surface p-8 text-center">
           <div className="text-[13px] text-ink-2">
             还没有跟单组合。挑一个你看好的 AI 交易员，「一键跟投」拿 1 万块虚拟资金跟随它的持仓。
@@ -106,7 +108,7 @@ export function Portfolios() {
         </div>
       )}
 
-      {portfolios.length >= maxAllowed && !isPro && (
+      {valid.length >= maxAllowed && !isPro && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-dashed border-accent/40 bg-accent/5 px-4 py-3.5">
           <div className="text-[13px]">
             <span className="font-bold text-accent">🔒 免费最多跟 1 个 AI</span>
