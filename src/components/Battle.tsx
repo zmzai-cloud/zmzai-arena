@@ -63,8 +63,19 @@ export function Battle() {
     const mine: BattleParticipant[] = loadUserAgents()
       .filter((a) => a.cfg)
       .map((a) => ({ id: a.id, name: a.name, emoji: a.emoji, style: a.style, cfg: a.cfg, simDays: a.simDays ?? a.days }));
+    // 同名同风格去重（“重新验证”会产生同名用户副本，一个官方 + 多个副本会刷屏）：
+    // 官方优先；副本之间保留 simDays 最大者（配置最完整）。
+    const staticsKeys = new Set(statics.map((s) => `${s.name}|${s.style}`));
+    const best = new Map<string, BattleParticipant>();
+    for (const s of statics) best.set(`${s.name}|${s.style}`, s);
+    for (const p of mine) {
+      const k = `${p.name}|${p.style}`;
+      const cur = best.get(k);
+      if (!cur) best.set(k, p);
+      else if (!staticsKeys.has(k) && p.simDays! > cur.simDays!) best.set(k, p);
+    }
     // 预选 id 排最前，其余按夏普降序
-    return [...statics, ...mine].sort((a, b) => {
+    return [...best.values()].sort((a, b) => {
       if (a.id === pickId) return -1;
       if (b.id === pickId) return 1;
       return 0;
