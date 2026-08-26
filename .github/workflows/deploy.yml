@@ -70,10 +70,8 @@ jobs:
       - name: Upload & deploy to HK server
         run: |
           SSH_OPTS="-i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=3"
+          # 服务器 store 内建 gzip -t 校验：传输截断的坏包立即删除并中止，不会进入 deploy
+          #（历史上 ssh 传输截断静默落盘坏包，曾导致 deploy 解压失败与 CI 挂起）
           ssh $SSH_OPTS ${HK_USER}@${HK_HOST} "store ${APP_NAME} ${{ github.sha }}" \
             < /tmp/${APP_NAME}-${{ github.sha }}.tar.gz
-          # 服务器侧校验：ssh 传输截断会静默落盘坏包（gzip: unexpected end of file），
-          # 历史卡死问题根因，store 后立即 gzip -t，坏包在 deploy 前暴露并中止
-          ssh $SSH_OPTS ${HK_USER}@${HK_HOST} \
-            "gzip -t /opt/zmzai/incoming/${APP_NAME}-${{ github.sha }}.tar.gz"
           ssh $SSH_OPTS ${HK_USER}@${HK_HOST} "deploy ${APP_NAME} ${{ github.sha }}"
