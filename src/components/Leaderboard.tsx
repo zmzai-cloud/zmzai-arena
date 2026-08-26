@@ -22,12 +22,15 @@ import {
 } from "@/lib/season";
 
 type SortKey = "totalReturn" | "maxDD" | "sharpe" | "riskScore";
+// 榜单口径：夏普榜（赛季结算口径，专业） / 收益榜（小韭菜视角，赚得多排前面）
+type BoardMode = "sharpe" | "return";
 
 const markets = ["全部", ...Array.from(new Set(STATIC_AGENTS.map((a) => a.market)))];
 
 // 终端式行情表：mono 表头 + 数字右对齐 + 细线，无圆角无阴影
 export function Leaderboard() {
   const [filter, setFilter] = useState("全部");
+  const [mode, setMode] = useState<BoardMode>("sharpe");
   const [sortKey, setSortKey] = useState<SortKey>("sharpe");
   const [dir, setDir] = useState<-1 | 1>(-1);
   const [userAgents, setUserAgents] = useState<Agent[]>([]);
@@ -56,10 +59,11 @@ export function Leaderboard() {
     return [...f].sort((a, b) => (a[sortKey] - b[sortKey]) * dir);
   }, [all, filter, sortKey, dir]);
 
-  // 当前赛季实时 TOP3（按夏普，与榜单默认排序一致）
+  // 当前赛季实时 TOP3：夏普榜按夏普、收益榜按总收益（口径随切换）
   const liveTop = useMemo<SeasonTopEntry[]>(() => {
+    const byReturn = mode === "return";
     return [...all]
-      .sort((a, b) => b.sharpe - a.sharpe)
+      .sort((a, b) => (byReturn ? b.totalReturn - a.totalReturn : b.sharpe - a.sharpe))
       .slice(0, 3)
       .map((a, i) => ({
         id: a.id,
@@ -70,14 +74,15 @@ export function Leaderboard() {
         totalReturn: a.totalReturn,
         rank: i + 1,
       }));
-  }, [all]);
+  }, [all, mode]);
 
-  // 我的最佳名次（creator === "我" 的策略，按夏普）
+  // 我的最佳名次（creator === "我"，名次口径随切换）
   const myBest = useMemo(() => {
     const mine = all.filter((a) => a.creator === "我");
     if (mine.length === 0) return null;
-    return Math.min(...mine.map((a) => liveRankOf(all, a.id) ?? Infinity));
-  }, [all]);
+    const ranks = mine.map((a) => rankBy(all, a.id, mode === "return" ? "totalReturn" : "sharpe") ?? Infinity);
+    return Math.min(...ranks);
+  }, [all, mode]);
 
   const curMonth = monthKey();
   const historyMonths = snaps ? Object.keys(snaps.months).sort().reverse() : [];
@@ -89,6 +94,12 @@ export function Leaderboard() {
       setSortKey(k);
       setDir(-1);
     }
+  };
+  const switchMode = (m: BoardMode) => {
+    if (m === mode) return;
+    setMode(m);
+    setSortKey(m === "return" ? "totalReturn" : "sharpe");
+    setDir(-1);
   };
   const arrow = (k: SortKey) => (k === sortKey ? (dir === -1 ? "↓" : "↑") : "⇅");
 
@@ -181,23 +192,43 @@ export function Leaderboard() {
         <HistoryTable entries={snaps?.months[seasonView] ?? []} />
       ) : (
         <>
-          {/* 市场筛选：下划线 tab，直角金融风 */}
+          {/* 市场筛选 + 榜单口径：下划线 tab，直角金融风 */}
           <div className="flex items-center gap-1 border-b border-line">
+            <button
+              onClick={() => switchMode("sharpe")}
+              title="按风险调整后收益（夏普）排名，与赛季结算同口径"
+              className={`-mb-px flex-none border-b-2 px-3 py-2 text-[13px] font-semibold transition-colors ${
+                mode === "sharpe" ? "border-accent text-ink" : "border-transparent text-ink-3 hover:text-ink"
+              }`}
+            >
+              夏普榜
+            </button>
+            <button
+              onClick={() => switchMode("return")}
+              title="按总收益排名：赚得多就排前面（小韭菜视角）"
+              className={`-mb-px flex-none border-b-2 px-3 py-2 text-[13px] font-semibold transition-colors ${
+                mode === "return" ? "border-accent text-ink" : "border-transparent text-ink-3 hover:text-ink"
+              }`}
+            >
+              收益榜
+            </button>
             {markets.map((m) => (
               <button
                 key={m}
                 onClick={() => setFilter(m)}
-                className={`-mb-px border-b-2 px-3 py-2 text-[13px] font-semibold transition-colors ${
+                className={`-mb-px px-3 py-2 text-[13px] font-semibold transition-colors ${
                   filter === m
-                    ? "border-accent text-ink"
-                    : "border-transparent text-ink-3 hover:text-ink"
+                    ? "border-b-2 border-accent text-ink"
+                    : "border-b-2 border-transparent text-ink-3 hover:text-ink"
                 }`}
               >
                 {m}
               </button>
             ))}
             <span className="ml-auto hidden pb-2 text-[11.5px] text-ink-3 sm:block">
-              点表头「总收益 / 回撤 / 夏普 / 风险分」排序
+              {mode === "return"
+                ? "收益榜按总收益排序 · 点表头可换列 · 跟投列按 1 万元换算"
+                : "点表头「总收益 / 回撤 / 夏普 / 风险分」排序"}
             </span>
           </div>
 
@@ -205,7 +236,7 @@ export function Leaderboard() {
           {liveTop.length > 0 && (
             <div className="grid grid-cols-3 gap-2 py-3">
               {liveTop.map((e) => (
-                <Podium key={e.id} e={e} />
+                <Podium key={e.id} e={e} mode={mode} />
               ))}
             </div>
           )}
@@ -221,6 +252,7 @@ export function Leaderboard() {
                   <th className="cursor-pointer" onClick={() => toggleSort("totalReturn")}>
                     总收益{sortKey === "totalReturn" && <span className="ml-1 text-accent">{arrow("totalReturn")}</span>}
                   </th>
+                  {mode === "return" && <th className="text-right">跟投 1 万 →</th>}
                   <th className="cursor-pointer" onClick={() => toggleSort("maxDD")}>
                     最大回撤{sortKey === "maxDD" && <span className="ml-1 text-accent">{arrow("maxDD")}</span>}
                   </th>
@@ -243,6 +275,7 @@ export function Leaderboard() {
                     liveRank={liveRankOf(all, a.id)}
                     medals={snaps ? medalsOf(a.id, snaps) : []}
                     isMine={a.creator === "我"}
+                    showWan={mode === "return"}
                   />
                 ))}
               </tbody>
@@ -258,9 +291,10 @@ export function Leaderboard() {
   );
 }
 
-/** 实时 TOP3 荣誉卡：名次 + 头像 + 名字 + 夏普 */
-function Podium({ e }: { e: SeasonTopEntry }) {
+/** 实时 TOP3 荣誉卡：名次 + 头像 + 名字 + 夏普（收益榜显示收益） */
+function Podium({ e, mode }: { e: SeasonTopEntry; mode: BoardMode }) {
   const tone = e.rank === 1 ? "text-accent" : e.rank === 2 ? "text-warning" : "text-ink-3";
+  const byReturn = mode === "return";
   return (
     <Link
       href={`/agents/${e.id}`}
@@ -272,7 +306,13 @@ function Podium({ e }: { e: SeasonTopEntry }) {
       </span>
       <span className="min-w-0">
         <span className="block truncate text-[13px] font-bold group-hover:text-accent">{e.name}</span>
-        <span className="num block text-[11px] text-ink-3">夏普 {e.sharpe.toFixed(2)}</span>
+        {byReturn ? (
+          <span className={`num block text-[11px] ${e.totalReturn >= 0 ? "text-accent" : "text-danger"}`}>
+            {fmtPct(e.totalReturn)}
+          </span>
+        ) : (
+          <span className="num block text-[11px] text-ink-3">夏普 {e.sharpe.toFixed(2)}</span>
+        )}
       </span>
     </Link>
   );
@@ -344,12 +384,14 @@ function Row({
   liveRank,
   medals,
   isMine,
+  showWan,
 }: {
   a: Agent;
   rank: number;
   liveRank: number | null;
   medals: { season: string; rank: number }[];
   isMine: boolean;
+  showWan: boolean;
 }) {
   const tb = tierBadge(a.tier);
   return (
@@ -393,6 +435,11 @@ function Row({
         <span className="ml-1.5 text-[12px] text-ink-3">{a.style}</span>
       </td>
       <td className={`num text-right ${a.totalReturn >= 0 ? "up" : "down"}`}>{fmtPct(a.totalReturn)}</td>
+      {showWan && (
+        <td className={`num text-right font-bold ${a.totalReturn >= 0 ? "text-accent" : "text-danger"}`}>
+          ¥{(10000 * (1 + a.totalReturn / 100)).toLocaleString("zh-CN", { maximumFractionDigits: 0 })}
+        </td>
+      )}
       <td className={`num text-right ${a.maxDD >= 0 ? "up" : "down"}`}>{fmtPct(a.maxDD)}</td>
       <td className="num text-right font-extrabold">{a.sharpe.toFixed(2)}</td>
       <td className="text-right">
@@ -415,6 +462,13 @@ function Row({
       </td>
     </tr>
   );
+}
+
+/** 榜单中某 agent 的名次（可选口径：夏普 / 总收益） */
+function rankBy(list: Agent[], id: number, key: "sharpe" | "totalReturn"): number | null {
+  const sorted = [...list].sort((a, b) => (key === "sharpe" ? b.sharpe - a.sharpe : b.totalReturn - a.totalReturn));
+  const idx = sorted.findIndex((a) => a.id === id);
+  return idx >= 0 ? idx + 1 : null;
 }
 
 function robCls(l: RobustnessLabel): string {

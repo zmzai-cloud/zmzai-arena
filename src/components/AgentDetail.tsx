@@ -42,6 +42,10 @@ export function AgentDetail({ agent }: { agent: Agent }) {
     setSeasonMedals(medalsOf(agent.id, loadSeasonSnapshots()));
   }, [agent.id]);
 
+  // 跟投换算（小韭菜叙事）：初始投入 → 按策略总收益换算期末金额
+  const [invest, setInvest] = useState(10000);
+  const finalValue = invest * (1 + agent.totalReturn / 100);
+
   // 验证报告导出（Pro 权益）：未登录/Free 时展示升级引导，Pro 直接触发服务端生成的 JSON 下载
   const [exportState, setExportState] = useState<"idle" | "busy" | "need-pro">("idle");
   const exportReport = async () => {
@@ -224,6 +228,38 @@ export function AgentDetail({ agent }: { agent: Agent }) {
         <Kpi v={agent.sharpe.toFixed(2)} l="夏普比率" />
         <Kpi v={String(agent.riskScore)} l="风险分 / 100" style={{ color: riskColor(agent.riskScore) }} />
         <Kpi v={`#${rank}`} l="竞技场排名" />
+      </div>
+
+      {/* 跟投换算：把专业收益翻译成小韭菜的“钱变多少钱” */}
+      <div className="mt-4 border border-line bg-surface p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div className="text-[13px] font-bold">跟投换算</div>
+          <div className="num text-[11px] text-ink-3">IF YOU FOLLOWED WITH ¥10,000</div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-end gap-x-8 gap-y-3">
+          <label className="flex items-center gap-2 text-[12.5px] text-ink-2">
+            初始投入
+            <input
+              type="number"
+              min={100}
+              step={1000}
+              value={invest}
+              onChange={(e) => setInvest(Math.max(0, Number(e.target.value) || 0))}
+              className="num w-28 rounded border border-line bg-surface-2 px-2 py-1.5 text-right text-[14px] font-bold text-ink outline-none focus:border-accent"
+            />
+            元
+          </label>
+          <div>
+            <div className="text-[11px] text-ink-3">按此策略 {agent.days} 个交易日总收益换算</div>
+            <div className={`num text-[22px] font-extrabold ${agent.totalReturn >= 0 ? "up" : "down"}`}>
+              ¥{finalValue.toLocaleString("zh-CN", { maximumFractionDigits: 0 })}
+              <span className="ml-2 align-middle text-[13px]">({fmtPct(agent.totalReturn)})</span>
+            </div>
+          </div>
+          <div className="max-w-[240px] text-[11px] leading-relaxed text-ink-3">
+            模拟收益换算，仅作展示——历史业绩不代表未来表现，不构成投资建议。
+          </div>
+        </div>
       </div>
 
       {/* 预期收益区间（真实对照分布，68% 区间 + 全范围） */}
