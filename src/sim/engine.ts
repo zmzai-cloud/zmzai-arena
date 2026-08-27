@@ -95,23 +95,36 @@ export function runSimulation(
         if (day % 5 === 0) {
           const line = tr.ddFrom20 >= 0 ? "站上" : "低于";
           decisions.push(mk(day, "HOLD", undefined, undefined, undefined,
-            `大盘: ${BENCH_INDEX_NAME} ${tr.phase} · ${line}20日线 ${(Math.abs(tr.ddFrom20) * 100).toFixed(1)}% · 距20日高点 ${(tr.ddFrom60 * 100).toFixed(1)}%`,
+            `大盘: ${BENCH_INDEX_NAME} ${tr.phase} · ${line}20日线 ${(Math.abs(tr.ddFrom20) * 100).toFixed(1)}% · 距60日线 ${(tr.ddFrom60 * 100).toFixed(1)}%`,
             "大盘"));
         }
         const cb = cfg.circuitBreaker;
         if (cb?.enabled) {
-          const cap = tr.ddFrom60 <= cb.ma60 ? cb.cap60 : tr.ddFrom20 <= cb.ma20 ? cb.cap20 : null;
-          if (cap != null && !breakerActive) {
+          // 触发级别：60 日线优先于 20 日线（更严级别覆盖）
+          const cap60Hit = tr.ddFrom60 <= cb.ma60;
+          const cap20Hit = tr.ddFrom20 <= cb.ma20;
+          if (!breakerActive && (cap60Hit || cap20Hit)) {
             breakerActive = true;
-            breakerCap = cap;
-            const r = enforceCap(market, holdings, cash, day, cap, decisions);
+            breakerCap = cap60Hit ? cb.cap60 : cb.cap20;
+            const r = enforceCap(market, holdings, cash, day, breakerCap, decisions);
             cash = r.cash;
             decisions.push(mk(day, "HOLD", undefined, undefined, undefined,
-              `大盘熔断: ${BENCH_INDEX_NAME} ${tr.ddFrom60 <= cb.ma60 ? "跌破60日线" : `低于20日线 ${(Math.abs(tr.ddFrom20) * 100).toFixed(1)}%`}，总仓位上限降至 ${(cap * 100).toFixed(0)}%（当前 ${(r.mvBefore / r.navBefore * 100).toFixed(0)}%）`,
+              `大盘熔断: ${BENCH_INDEX_NAME} ${cap60Hit ? "跌破60日线" : `低于20日线 ${(Math.abs(tr.ddFrom20) * 100).toFixed(1)}%`}，总仓位上限降至 ${(breakerCap * 100).toFixed(0)}%（当前 ${(r.mvBefore / r.navBefore * 100).toFixed(0)}%）`,
+              "风控"));
+          } else if (breakerActive && breakerCap === cb.cap20 && cap60Hit) {
+            // 熔断升级：20 日线级别熔断中继续跌破 60 日线 → 升至更严级别（熊市常态顺序：先破20线后破60线）
+            breakerCap = cb.cap60;
+            const r = enforceCap(market, holdings, cash, day, breakerCap, decisions);
+            cash = r.cash;
+            decisions.push(mk(day, "HOLD", undefined, undefined, undefined,
+              `大盘熔断升级: ${BENCH_INDEX_NAME} 继续跌破60日线，总仓位上限降至 ${(cb.cap60 * 100).toFixed(0)}%（当前 ${(r.mvBefore / r.navBefore * 100).toFixed(0)}%）`,
               "风控"));
           } else if (breakerActive) {
-            // 解除需回到触发级别之上（滞回，避免边缘反复开关）：60 日线熔断须站回 60 日线，20 日线熔断须站回 20 日线
-            const released = breakerCap === cb.cap60 ? tr.ddFrom60 > cb.ma60 : tr.ddFrom20 > cb.ma20;
+            // 解除需站回触发级别之上并留出缓冲带（防边缘震荡反复开关）：60 级别看 60 线、20 级别看 20 线
+            const CB_RELEASE_BUFFER = 0.005;
+            const released = breakerCap === cb.cap60
+              ? tr.ddFrom60 > cb.ma60 + CB_RELEASE_BUFFER
+              : tr.ddFrom20 > cb.ma20 + CB_RELEASE_BUFFER;
             if (released) {
               breakerActive = false;
               decisions.push(mk(day, "HOLD", undefined, undefined, undefined,
@@ -167,11 +180,15 @@ export function runSimulation(
         }
         continue;
       }
-      // BUY：护栏校验
+      // BUY：护栏校验（熔断降仓中暂停新买入，防止当日买回次日又强平的反复摩擦）
       const navB = navValue(market, holdings, cash, day);
       const desired = prop.frac * navB;
       const cap = cfg.maxSingle * navB;
       const nm = INSTRUMENT_MAP[prop.code]?.name ?? prop.code;
+      if (breakerActive) {
+        decisions.push(mk(day, "REJECT", prop.code, prop.price, undefined, `买入 ${nm} 被拒：大盘熔断降仓中，暂停新买入`, "风控"));
+        continue;
+      }
       if (desired > cap) {
         decisions.push(mk(day, "REJECT", prop.code, prop.price, undefined, `买入 ${nm} 被拒：金额超出单笔 ${(cfg.maxSingle * 100).toFixed(0)}% NAV 上限`, "风控"));
         continue;
@@ -382,7 +399,6 @@ function enforceCap(
   const targetMv = cap * navBefore;
   if (mvBefore <= targetMv) return { cash, mvBefore, navBefore };
   for (const [code, h] of [...holdings]) {
-    if (mvBefore <= targetMv) break;
     const p = priceAt(market, code, day);
     if (p <= 0) continue;
     const mvI = h.qty * p;

@@ -68,13 +68,11 @@ export function excessOf(totalReturn: number, indexReturnValue: number | null): 
   return { indexReturn: indexReturnValue, excess: totalReturn - indexReturnValue, beat: totalReturn >= indexReturnValue };
 }
 
-function ma(bars: RealRow[], day: number, n: number): number {
-  const start = Math.max(0, day - n + 1);
+function ma(bars: RealRow[], day: number, n: number): number | null {
+  const start = day - n + 1;
+  // 样本不足 n 根时真实均线未成形，返回 null（不做部分均值近似，避免趋势/熔断误判）
+  if (start < 0) return null;
   let s = 0;
-  let c = 0;
-  for (let i = start; i <= day; i++) {
-    s += bars[i][2];
-    c++;
-  }
-  return c ? s / c : 0;
+  for (let i = start; i <= day; i++) s += bars[i][2];
+  return s / n;
 }
