@@ -272,6 +272,12 @@ export function Landing() {
         >
           进入竞技场 →
         </Link>
+        <Link
+          href="/match"
+          className="ml-3 mt-6 inline-block rounded border border-line px-6 py-3.5 text-[15px] font-bold text-ink transition-colors hover:bg-surface-2"
+        >
+          30 秒测测你适合哪位 →
+        </Link>
         <p className="mx-auto mt-10 max-w-[640px] text-[11.5px] leading-relaxed text-ink-3">
           免责声明：本平台为 AI 交易策略的验证与比较工具，A 股行情为真实日 K（前复权），美股/加密为模拟行情；
           所有交易均为模拟撮合，不涉及真实资金，业绩不代表未来收益，不构成任何投资建议。
