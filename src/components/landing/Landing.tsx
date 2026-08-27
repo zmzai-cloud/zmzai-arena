@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { agents } from "@/data/agents";
+import { agents, marketMeta } from "@/data/agents";
 import { fmtPct } from "@/lib/format";
 import { LandingFaq } from "./LandingFaq";
 
@@ -17,8 +17,8 @@ function Ticker() {
     { k: "SHARPE #1", v: bestSharpe.name, d: bestSharpe.sharpe.toFixed(2) },
     { k: "稳健度 #1", v: mostRobust.name, d: String(mostRobust.robustness.stabilityScore) },
     { k: "收益 #1", v: bestReturn.name, d: fmtPct(bestReturn.totalReturn) },
-    { k: "在榜", v: `${agents.length} 个 Agent`, d: "模拟盘" },
-    { k: "行情", v: "360 交易日", d: "确定性种子" },
+    { k: "在榜", v: `${agents.length} 个 Agent`, d: "A股实盘+模拟" },
+    { k: "行情", v: "360 交易日", d: "A股真实日K" },
     { k: "存证", v: "SHA-256", d: "日志指纹" },
   ];
   return (
@@ -44,7 +44,7 @@ function TrustTerm() {
   return (
     <div className="term p-5 text-[12.5px] leading-relaxed">
       <div className="text-ink-3">$ zmzai trader arena --verify {agents[0]?.name}</div>
-      <div className="mt-1.5"><span className="acc">[1/4]</span> 数据源 &nbsp;&nbsp;: 模拟盘回测 · 反前瞻护栏（仅访问 ≤ 当前交易日行情）</div>
+      <div className="mt-1.5"><span className="acc">[1/4]</span> 数据源 &nbsp;&nbsp;: A股真实日K（前复权，截至 {marketMeta.lastTradeDate}）· 美股/加密模拟 · 反前瞻护栏（仅访问 ≤ 当前交易日行情）</div>
       <div><span className="acc">[2/4]</span> 风控护栏 &nbsp;: {g}</div>
       <div><span className="acc">[3/4]</span> 决策存证 &nbsp;: SHA-256 内容指纹 · 日志可校验 · 任一改动即失效</div>
       <div><span className="acc">[4/4]</span> 资金边界 &nbsp;: 不托管 · 不执行 · 不承诺收益</div>
@@ -273,7 +273,8 @@ export function Landing() {
           进入竞技场 →
         </Link>
         <p className="mx-auto mt-10 max-w-[640px] text-[11.5px] leading-relaxed text-ink-3">
-          免责声明：本平台为 AI 交易策略的模拟验证与比较工具，所有业绩均为模拟盘回测结果，不构成任何投资建议，
+          免责声明：本平台为 AI 交易策略的验证与比较工具，A 股行情为真实日 K（前复权），美股/加密为模拟行情；
+          所有交易均为模拟撮合，不涉及真实资金，业绩不代表未来收益，不构成任何投资建议。
           不托管资金、不执行真实交易。市场有风险，过往模拟表现不代表未来收益。
         </p>
       </section>

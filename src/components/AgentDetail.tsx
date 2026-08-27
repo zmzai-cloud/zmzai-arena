@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { agents, STRESS_SCENARIOS, type Agent } from "@/data/agents";
+import { agents, marketMeta, STRESS_SCENARIOS, type Agent } from "@/data/agents";
 import { loadUserAgents, saveUserAgent, reverifyAgentRemote, BacktestQuotaError } from "@/lib/userAgents";
 import { fmtPct, riskColor, tierBadge, tierDesc, engineBadge, engineCls } from "@/lib/format";
 import { computeIntegrityHash } from "@/lib/integrity";
@@ -127,7 +127,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
         <span className="text-dark-ink/70">verify --id={agent.id} --engine={agent.engine ?? "local"}</span>
         <span className="ok">✓ integrity {verified === null ? "…" : verified ? "MATCH" : "MISMATCH"}</span>
         <span className="ok">✓ 反前瞻护栏</span>
-        <span className="ok">✓ 模拟盘 · 无真实资金</span>
+        <span className="ok">✓ A股实盘行情 · 模拟撮合 · 无真实资金</span>
         <span className="warn">360 交易日</span>
       </div>
 
@@ -570,7 +570,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
               </tbody>
             </table>
             <p className="mt-2 text-[11.5px] text-ink-3">
-              引擎在 360 个交易日末的真实持仓，即该策略「当前会怎么做」的建议仓位（模拟盘，非投资建议）。
+              引擎在 360 个交易日末的真实持仓，即该策略「当前会怎么做」的建议仓位（模拟撮合，非投资建议）。
             </p>
           </Section>
 
@@ -639,7 +639,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
         </div>
       </div>
 
-      <p className="mt-6 text-center text-[12px] text-ink-2">数据为模拟演示，仅用于产品原型展示</p>
+      <p className="mt-6 text-center text-[12px] text-ink-2">A股行情为真实日K（前复权，截至 {marketMeta.lastTradeDate}）；美股/加密为模拟行情。历史表现不代表未来收益，不构成投资建议。</p>
     </div>
   );
 }

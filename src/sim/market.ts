@@ -1,5 +1,5 @@
-// 仿真行情：种子化多资产几何布朗运动（GBM）。
-// 不含任何真实行情，全部为可复现的随机序列，仅用于产品原型演示。
+// 行情引擎：A 股标的默认接入真实日 K（前复权，见 src/data/market-real.ts，由
+// scripts/fetch-market.mjs 拉取生成）；其余市场（美股/加密）保持种子化 GBM 模拟。
 
 import { makeRng, gaussian } from "./rng";
 
@@ -16,12 +16,18 @@ export interface Instrument {
 
 export interface Bar {
   t: number; // 第几天（0 起）
+  date?: string; // 真实交易日（仅实盘数据源）
+  open?: number;
   close: number;
   high: number;
   low: number;
+  volume?: number;
 }
 
 export type PriceSeries = Record<string, Bar[]>; // code -> 每日 Bar
+
+// 实盘数据行：[date, open, close, high, low, volume]
+export type RealRow = [string, number, number, number, number, number];
 
 // 竞技场标的池（覆盖现有 10 个智能体的持仓与备选池）
 export const INSTRUMENTS: Instrument[] = [
@@ -70,6 +76,36 @@ export function generateMarket(days: number, seed: number): PriceSeries {
     series[inst.code] = bars;
   }
   return series;
+}
+
+// 混合行情：先用 GBM 生成全量序列，再把实盘标段替换为真实日 K（取最近 days 根，
+// 保证行情尾部对齐当前交易日；不足 days 天则保留拉到的全部根数）。
+// 非实盘标的保持确定性 GBM，全站可复现。
+export function buildMarket(
+  days: number,
+  seed: number,
+  real?: Record<string, RealRow[]>
+): PriceSeries {
+  const series = generateMarket(days, seed);
+  if (real) {
+    for (const [code, rows] of Object.entries(real)) {
+      if (!INSTRUMENT_MAP[code]) continue; // 只接受标的池内的 code
+      series[code] = rows
+        .slice(-days)
+        .map((r, t) => ({ t, date: r[0], open: r[1], close: r[2], high: r[3], low: r[4], volume: r[5] }));
+    }
+  }
+  return series;
+}
+
+// 从行情序列聚合全局交易日历（所有实盘 bar 的日期并集，升序）；无实盘数据时返回空数组
+// 供决策日志/图表把「第 N 天」映射为真实交易日。
+export function tradeCalendar(series: PriceSeries): string[] {
+  const set = new Set<string>();
+  for (const bars of Object.values(series)) {
+    for (const b of bars) if (b.date) set.add(b.date);
+  }
+  return [...set].sort();
 }
 
 // 取某标的截至 day（含）的收盘价序列——反前瞻：永远拿不到未来价格

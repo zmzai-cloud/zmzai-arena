@@ -4,7 +4,8 @@
 // 全部由仿真引擎逐日跑出。引擎只读取 ≤ 当前日的行情（反前瞻），风控护栏在引擎内强制执行。
 // 未来可把策略执行这一步替换为真实 zmzai-sandbox 调用，数据契约不变。
 
-import { generateMarket, INSTRUMENT_MAP } from "@/sim/market";
+import { buildMarket, tradeCalendar, INSTRUMENT_MAP } from "@/sim/market";
+import { REAL_MARKET, REAL_MARKET_META } from "@/data/market-real";
 import { STRATEGIES, type StrategyConfig } from "@/sim/strategies";
 import { runSimulation, type Tier as SimTier, type RawDecision } from "@/sim/engine";
 import { type RiskPillar } from "@/sim/metrics";
@@ -69,10 +70,15 @@ export interface Agent {
   simDays?: number; // 引擎模拟天数：与展示 days 解耦，重新验证按此周期重跑（保证与档案基准可比）
 }
 
-// 全市场行情只生成一次（确定性种子），所有智能体共用同一段可复现行情
+// 全市场行情只生成一次（确定性种子）：A 股标的替换为真实日 K（前复权，
+// 见 src/data/market-real.ts），其余市场保持 GBM 模拟；所有智能体共用同一段行情
 const GLOBAL_SEED = 20260825;
 const MARKET_DAYS = 360;
-export const market = generateMarket(MARKET_DAYS, GLOBAL_SEED);
+export const market = buildMarket(MARKET_DAYS, GLOBAL_SEED, REAL_MARKET);
+// 真实交易日历（day 索引 → YYYY-MM-DD），供决策日志展示真实日期
+export const tradeDates: string[] = tradeCalendar(market);
+// 实盘数据元信息（数据源/最新交易日），供 UI 标注「数据源」
+export const marketMeta = REAL_MARKET_META;
 
 // 每个智能体的仿真参数（与 META 人设一一对应），供压力测试复用；定义见 META 之后。
 
@@ -301,6 +307,13 @@ const META: Meta[] = [
 ];
 
 function fmtTime(day: number, simDays: number, tier: Tier): string {
+  const date = tradeDates[day]; // 实盘数据下映射为真实交易日
+  const times = ["09:35", "10:15", "11:10", "13:40", "14:02", "09:32", "10:31"];
+  const hhmm = times[day % times.length];
+  if (date) {
+    return tier === "Backtest" ? `回测 ${date}` : `${date} ${hhmm}`;
+  }
+  // 兜底（无实盘数据时）：旧逻辑按固定基准倒推
   if (tier === "Backtest") {
     const span = Math.floor((day / Math.max(1, simDays - 1)) * 24);
     const year = 2023 + Math.floor(span / 12);
@@ -312,8 +325,7 @@ function fmtTime(day: number, simDays: number, tier: Tier): string {
   d.setDate(base.getDate() - (simDays - 1 - day));
   const MM = String(d.getMonth() + 1).padStart(2, "0");
   const DD = String(d.getDate()).padStart(2, "0");
-  const times = ["09:35", "10:15", "11:10", "13:40", "14:02", "09:32", "10:31"];
-  return `${MM}-${DD} ${times[day % times.length]}`;
+  return `${MM}-${DD} ${hhmm}`;
 }
 
 function fmtMeta(r: RawDecision, tier: Tier, model: string): string {

@@ -161,7 +161,7 @@ export function StressTest() {
       </div>
 
       <p className="mt-6 text-center text-[12px] text-ink-2">
-        压力测试为基于历史行情形态的模拟演示，仅用于产品原型展示 · 投资有风险，本平台不参与任何真实交易
+        压力测试为基于真实A股行情叠加历史极端形态的模拟，仅用于验证策略韧性 · 投资有风险，本平台不参与任何真实交易
       </p>
     </div>
   );

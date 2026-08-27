@@ -315,7 +315,7 @@ export function CreateForm({ forkId }: { forkId?: string }) {
             <div className="mt-2"><b>调仓：</b>每 {rebalance} 天；标的池 {universe.length} 只。</div>
             <div className="mt-2 text-ink-3">提交后将提交至 zmzai-sandbox 隔离沙箱做真实回测（含撮合成本），并叠加黑天鹅压力测试。</div>
           </div>
-          <p className="mt-4 text-[11.5px] text-ink-2">数据为模拟演示，仅用于产品原型展示</p>
+          <p className="mt-4 text-[11.5px] text-ink-2">模拟撮合 · A股真实日K（前复权）+ 美股/加密模拟 · 不构成投资建议</p>
         </div>
       </div>
     </section>

@@ -63,7 +63,7 @@ export default function PricingPage() {
       <div className="mt-4 border border-line p-5">
         <div className="num text-[11px] tracking-[0.14em] text-ink-3">DISCLAIMER · 声明</div>
         <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
-          模拟盘回测结果不代表未来收益，不构成投资建议。付费解锁的是验证工具能力，
+          A股真实日K行情下的模拟回测不代表未来收益，不构成投资建议。付费解锁的是验证工具能力，
           不承诺任何收益。订阅可随时取消，未使用时长按比例退款。
         </p>
       </div>

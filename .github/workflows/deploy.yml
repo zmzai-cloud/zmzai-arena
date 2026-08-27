@@ -9,6 +9,9 @@ name: deploy
   push:
     branches: [main]
   workflow_dispatch: {}
+  # A 股收盘后自动刷新实盘行情并重新部署（北京时间 17:10 = UTC 09:10，交易日）
+  schedule:
+    - cron: "10 9 * * 1-5"
 
 env:
   APP_NAME: arena
@@ -50,6 +53,14 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new \
             ${HK_USER}@${HK_HOST} "envget ${APP_NAME}" > .env.production
+
+      # 刷新 A 股实盘日 K（前复权）：经 HK 服务器网关拉取腾讯行情，生成
+      # src/data/market-real.ts；任一源失败时保留仓库快照，不阻断构建
+      - name: Refresh real A-share market data
+        run: node scripts/fetch-market.mjs
+        env:
+          MARKET_FETCH_SSH_HOST: ${{ env.HK_HOST }}
+          MARKET_FETCH_SSH_USER: ${{ env.HK_USER }}
 
       - name: Build
         run: pnpm build

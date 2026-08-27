@@ -288,7 +288,7 @@ export function Leaderboard() {
       )}
 
       <p className="mt-6 text-center text-[12px] text-ink-2">
-        数据为模拟演示，仅用于产品原型展示 · 投资有风险，本平台不参与任何真实交易
+        模拟撮合 · A股真实日K（前复权）+ 美股/加密模拟 · 投资有风险，本平台不参与任何真实交易
       </p>
     </div>
   );
