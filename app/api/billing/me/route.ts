@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AUTH_ORIGIN, type SessionUser } from "@/lib/auth";
+import { AUTH_ORIGIN, getSessionUser, type SessionUser } from "@/lib/auth";
 import { accountKey, getAccount, peekQuota, BillingStoreError } from "@/lib/billing-store";
 import { PLANS } from "@/lib/billing";
 import { xorpayConfig } from "@/lib/xorpay";
@@ -9,23 +9,12 @@ export const dynamic = "force-dynamic";
 // 查询当前账户：计划、滚动 30 天回测额度、权益快照。
 // 登录用户按 SSO userId 记账；未登录按「anon:<ip>」独立记账（同样享受免费额度）。
 export async function GET(req: NextRequest) {
-  // 复用 /api/me 的会话解析逻辑，避免重复实现
-  const cookie = req.headers.get("cookie") ?? "";
+  // 复用 getSessionUser 解析登录态（SSO 会话代理）
   let user: SessionUser | null = null;
-  if (cookie) {
-    try {
-      const res = await fetch(`${AUTH_ORIGIN}/api/me`, {
-        headers: { cookie },
-        cache: "no-store",
-        signal: AbortSignal.timeout(8_000),
-      });
-      if (res.ok) {
-        const data = (await res.json()) as { user: SessionUser | null };
-        user = data.user;
-      }
-    } catch {
-      // 会话服务不可达时按匿名账户处理
-    }
+  try {
+    user = await getSessionUser(req);
+  } catch {
+    // 会话服务不可达时按匿名账户处理
   }
 
   const fwd = req.headers.get("x-forwarded-for");

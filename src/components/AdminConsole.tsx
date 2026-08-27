@@ -31,32 +31,32 @@ export function AdminConsole() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  // 会话内已有密钥则自动尝试（刷新不丢登录态；关闭标签页即失效）
+  // 挂载时：会话内已有密钥则自动尝试；否则探测 SSO admin 通道（已登录的全域管理员账号可直接进入）
   useEffect(() => {
     const saved = sessionStorage.getItem("arena_admin_secret");
     if (saved) {
       setSecret(saved);
       void tryLogin(saved);
     } else {
-      setChecking(false);
+      void tryLogin("", true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function tryLogin(s: string) {
+  async function tryLogin(s: string, quiet = false) {
     setSecretError(null);
-    const res = await fetch("/api/billing/admin/accounts", {
-      headers: { "x-admin-secret": s },
-    });
+    const headers: Record<string, string> = {};
+    if (s) headers["x-admin-secret"] = s;
+    const res = await fetch("/api/billing/admin/accounts", { headers });
     const data = (await res.json().catch(() => ({}))) as AdminAccountsResponse;
     if (res.ok && data.accounts) {
       setAccounts(data.accounts);
-      sessionStorage.setItem("arena_admin_secret", s);
+      if (s) sessionStorage.setItem("arena_admin_secret", s);
       setAuthed(true);
     } else {
       sessionStorage.removeItem("arena_admin_secret");
       setAuthed(false);
-      setSecretError(data.error ?? "密钥无效");
+      if (!quiet) setSecretError(data.error ?? "密钥无效");
     }
     setChecking(false);
   }
@@ -118,7 +118,7 @@ export function AdminConsole() {
         <div className="w-full max-w-sm border border-line bg-surface p-6">
           <div className="num text-[11px] tracking-[0.14em] text-ink-3">OPS · 运营后台</div>
           <h1 className="mt-2 text-xl font-extrabold">管理员登录</h1>
-          <p className="mt-1 text-[12.5px] text-ink-2">输入服务器 BILLING_ADMIN_SECRET（内测发放/回收 Pro 用）</p>
+          <p className="mt-1 text-[12.5px] text-ink-2">输入 BILLING_ADMIN_SECRET，或使用已登录的全域管理员账号（如 mifindxuan@gmail.com）</p>
           <input
             type="password"
             value={secret}
@@ -130,10 +130,10 @@ export function AdminConsole() {
           {secretError && <div className="mt-2 text-[12.5px] text-danger">{secretError}</div>}
           <button
             onClick={() => void tryLogin(secret)}
-            disabled={checking || !secret}
+            disabled={checking}
             className="mt-4 w-full rounded bg-accent py-2.5 text-[14px] font-semibold text-accent-ink transition-colors hover:opacity-90 disabled:opacity-50"
           >
-            {checking ? "验证中…" : "登录"}
+            {checking ? "验证中…" : secret ? "登录" : "使用已登录的 admin 账号进入"}
           </button>
         </div>
       </div>

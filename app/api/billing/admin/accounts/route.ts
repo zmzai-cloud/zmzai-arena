@@ -1,20 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { BILLING_ADMIN_SECRET } from "@/lib/billing";
 import { listAccounts, BillingStoreError } from "@/lib/billing-store";
+import { isBillingAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
-// 运营后台：全量账户列表（按创建时间倒序）。鉴权与 grant 同源（x-admin-secret）。
+// 运营后台：全量账户列表（按创建时间倒序）。鉴权双通道：x-admin-secret 或已登录的 SSO admin 账号。
 export async function GET(req: NextRequest) {
-  const secret = BILLING_ADMIN_SECRET();
-  if (!secret) {
+  if (!(await isBillingAdmin(req))) {
     return NextResponse.json(
-      { code: "ADMIN_DISABLED", error: "服务器未配置 BILLING_ADMIN_SECRET" },
-      { status: 503 }
+      { code: "FORBIDDEN", error: "无权限：需要管理员密钥或 admin 账号" },
+      { status: 403 }
     );
-  }
-  if (req.headers.get("x-admin-secret") !== secret) {
-    return NextResponse.json({ code: "FORBIDDEN", error: "无效的管理员密钥" }, { status: 403 });
   }
 
   let accounts;

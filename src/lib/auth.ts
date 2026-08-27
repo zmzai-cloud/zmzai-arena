@@ -29,3 +29,26 @@ export function loginUrl(next: string): string {
 export function logoutUrl(next: string): string {
   return `${AUTH_ORIGIN}/logout?next=${encodeURIComponent(absNext(next))}`;
 }
+
+// 服务端：从请求 cookie 解析当前登录用户（SSO 会话代理，与 /api/me 同源）。
+// 仅接受请求头对象（不引入 next/headers，保持可被客户端安全引用）。
+export async function getSessionUser(
+  req: Pick<Request, "headers">
+): Promise<SessionUser | null> {
+  const cookie = req.headers.get("cookie") ?? "";
+  if (!cookie) return null;
+  try {
+    const res = await fetch(`${AUTH_ORIGIN}/api/me`, {
+      headers: { cookie },
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { user: SessionUser | null };
+      return data.user;
+    }
+  } catch {
+    // 会话服务不可达时按未登录处理
+  }
+  return null;
+}
