@@ -369,4 +369,9 @@ export function setPlan(
   return acc;
 }
 
+/** 全量账户列表（运营后台用）。返回 key（user:<id> / anon:<ip>）与账户快照。 */
+export function listAccounts(): Array<{ key: string; account: Account }> {
+  return [...loadAll().entries()].map(([key, account]) => ({ key, account }));
+}
+
 export { PLAN };

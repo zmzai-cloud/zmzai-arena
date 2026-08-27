@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BILLING_ADMIN_SECRET, PLAN } from "@/lib/billing";
-import { setPlan, BillingStoreError } from "@/lib/billing-store";
+import { setPlan, getAccount, BillingStoreError } from "@/lib/billing-store";
 
 export const dynamic = "force-dynamic";
 
@@ -34,9 +34,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // 续期语义：未过期的 Pro 从原到期时间累加（避免覆盖剩余时长），否则从现在起算
+  let base = Date.now();
+  if (plan === PLAN.PRO && typeof o.durationDays === "number" && o.durationDays > 0) {
+    try {
+      const existing = getAccount(key);
+      if (existing?.plan === PLAN.PRO && existing.expiresAt) {
+        const t = new Date(existing.expiresAt).getTime();
+        if (t > base) base = t;
+      }
+    } catch {
+      // 读取失败按从现在起算（存储层会在 setPlan 再报错）
+    }
+  }
   const expiresAt =
     plan === PLAN.PRO && typeof o.durationDays === "number" && o.durationDays > 0
-      ? new Date(Date.now() + o.durationDays * 86_400_000).toISOString()
+      ? new Date(base + o.durationDays * 86_400_000).toISOString()
       : null;
   try {
     const acc = setPlan(key, plan, "grant", expiresAt);
