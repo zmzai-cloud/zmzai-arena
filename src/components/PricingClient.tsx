@@ -25,12 +25,16 @@ interface XorPayPay {
 }
 
 // 定价页交互：加载当前账户（计划/额度）→ 升级按钮打开支付弹层（微信/支付宝二选一，扫码/跳转支付，轮询自动开通）
+// 支付通道未配置时展示「内测发放」引导（管理员 grant 开通），配置后自动切回支付流程。
 export function PricingClient() {
   const [user, setUser] = useState<{ id: string; name: string; email: string } | null>(null);
   const [billing, setBilling] = useState<BillingState | null>(null);
+  const [paymentCfg, setPaymentCfg] = useState<{ provider: string; configured: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [betaOpen, setBetaOpen] = useState(false); // 内测发放说明展开
+  const [copied, setCopied] = useState(false); // Arena ID 已复制提示
   // pay = 弹层状态（period 定案），payData = 已创建的支付订单（未创建时先选支付方式）
   const [pay, setPay] = useState<{ period: "monthly" | "yearly" } | null>(null);
   const [payData, setPayData] = useState<XorPayPay | null>(null);
@@ -46,6 +50,7 @@ export function PricingClient() {
         if (!alive) return;
         setUser(me.user ?? null);
         setBilling(bill.account ?? null);
+        setPaymentCfg(bill.payment ?? null);
       })
       .catch(() => {});
     return () => {
@@ -138,6 +143,7 @@ export function PricingClient() {
   }, [pay]);
 
   const isPro = billing?.plan === "pro";
+  const betaMode = paymentCfg !== null && !paymentCfg.configured; // 支付通道未配置：内测发放模式
   const periodLabel = pay?.period === "yearly" ? "年付" : "月付";
   const periodPrice = pay?.period === "yearly" ? PLANS.pro.priceYearly : PLANS.pro.priceMonthly;
 
@@ -202,6 +208,40 @@ export function PricingClient() {
                 无限回测已解锁
               </div>
             </>
+          ) : betaMode ? (
+            /* 内测发放模式：支付通道未配置，展示申请引导 */
+            <div className="space-y-2">
+              <button
+                onClick={() => setBetaOpen((v) => !v)}
+                className="w-full rounded bg-accent py-2.5 text-[14px] font-semibold text-accent-ink transition-colors hover:opacity-90"
+              >
+                {betaOpen ? "收起申请说明" : "申请内测 Pro"}
+              </button>
+              {betaOpen && (
+                <div className="rounded border border-line bg-surface p-3">
+                  <div className="text-[12.5px] leading-relaxed text-ink-2">
+                    内测期 Pro 通过邀请发放。联系 support@zmzai.cloud 并附上你的 Arena ID：
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="num truncate text-[12.5px] font-semibold text-ink-1">
+                      {user?.id ?? "—"}
+                    </span>
+                    <button
+                      onClick={() => {
+                        if (!user?.id) return;
+                        void navigator.clipboard?.writeText(user.id).catch(() => {});
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 1500);
+                      }}
+                      className="shrink-0 rounded border border-line px-2 py-1 text-[11.5px] text-ink-2 transition-colors hover:border-accent hover:text-accent"
+                    >
+                      {copied ? "已复制 ✓" : "复制 ID"}
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div className="num text-center text-[11px] text-ink-3">支付通道开通中 · 内测免费</div>
+            </div>
           ) : (
             <div className="space-y-2">
               <button

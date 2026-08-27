@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AUTH_ORIGIN, type SessionUser } from "@/lib/auth";
 import { accountKey, getAccount, peekQuota, BillingStoreError } from "@/lib/billing-store";
 import { PLANS } from "@/lib/billing";
+import { xorpayConfig } from "@/lib/xorpay";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,8 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     user,
+    // 支付通道配置状态：未配置时前端展示「内测发放」引导（配置后自动切回支付模式，无需改前端）
+    payment: { provider: "xorpay", configured: xorpayConfig() !== null },
     account: {
       plan: acc.plan,
       planSince: acc.planSince,
