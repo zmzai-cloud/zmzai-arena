@@ -7,12 +7,13 @@
 
 import { INSTRUMENT_MAP } from "@/sim/market";
 import { runSimulation, type RawDecision, type Tier as SimTier } from "@/sim/engine";
+import { DEFAULT_CIRCUIT_BREAKER, type StrategyConfig, type StyleKey } from "@/sim/strategies";
+import { REAL_INDEXES } from "@/data/market-real";
 import { stressForConfig, type AgentStress, type SimSpec } from "@/sim/stress";
 import { attributeReturn, type Attribution } from "@/sim/attribution";
 import { certifyRobustness, type RobustnessCert } from "@/sim/robustness";
 import { computeIntegrityHash } from "@/lib/integrity";
 import { type Agent, type Decision, market, agents as STATIC_AGENTS } from "@/data/agents";
-import { type StrategyConfig, type StyleKey } from "@/sim/strategies";
 import type { Metrics } from "@/sim/metrics";
 import type { SessionUser } from "@/lib/auth";
 
@@ -74,6 +75,7 @@ export interface CreateAgentInput {
   rebalance: number; // 天
   prompt: string;
   slogan?: string;
+  circuitBreaker?: boolean; // 大盘熔断护栏开关（默认开启，见 DEFAULT_CIRCUIT_BREAKER）
 }
 
 // ---------- 决策日志格式化（与官方 Agent 同款） ----------
@@ -128,6 +130,8 @@ function buildCfg(input: CreateAgentInput, id: number): StrategyConfig {
     stopDD: input.stopDD,
     rebalance: Math.max(1, Math.round(input.rebalance)),
     aggr: STYLE_AGGR[input.style],
+    // 大盘熔断护栏：默认开启（仅引擎收到指数行情时生效）；显式关闭则不注入
+    circuitBreaker: input.circuitBreaker === false ? undefined : DEFAULT_CIRCUIT_BREAKER,
   };
 }
 
@@ -175,7 +179,11 @@ function assembleAgent(input: CreateAgentInput, creator: string, id: number, sim
     prompt: input.prompt,
     guard: `风控规则：单笔 ≤ ${pct(input.maxSingle)} NAV；强制 ≥ ${pct(
       input.minCash
-    )} 现金；回撤 > ${pct(input.stopDD)} 自动减仓。`,
+    )} 现金；回撤 > ${pct(input.stopDD)} 自动减仓。${
+      cfg.circuitBreaker
+        ? `大盘熔断：沪深300 跌破20日线 -3% 强制降仓至 ${(cfg.circuitBreaker.cap20 * 100).toFixed(0)}%，跌破60日线降至 ${(cfg.circuitBreaker.cap60 * 100).toFixed(0)}%。`
+        : ""
+    }`,
     positions: parts.positions,
     log: parts.decisions.map((r) => toDecision(r, simDays)).slice(-12),
     stress: parts.stress,
@@ -197,7 +205,7 @@ export function createUserAgent(input: CreateAgentInput, creator: string): Agent
 
   const cfg: StrategyConfig = buildCfg(input, id);
 
-  const res = runSimulation(cfg, market, simDays, seed, "Paper" as SimTier);
+  const res = runSimulation(cfg, market, simDays, seed, "Paper" as SimTier, REAL_INDEXES);
   const stress = buildStress(id, simDays, seed, cfg);
 
   return assembleAgent(input, creator, id, simDays, seed, {
@@ -317,6 +325,7 @@ function inputFromAgent(agent: Agent): CreateAgentInput {
     rebalance: cfg.rebalance,
     prompt: agent.prompt,
     slogan: agent.slogan,
+    circuitBreaker: cfg.circuitBreaker ? true : false,
   };
 }
 
@@ -391,7 +400,7 @@ export async function reverifyAgentRemote(agent: Agent): Promise<Agent> {
 /** 本地引擎重跑（网络降级路径）：与创建流程同款管线 */
 function reverifyLocal(agent: Agent, id: number, simDays: number, seed: number): Agent {
   const cfg = agent.cfg!;
-  const res = runSimulation(cfg, market, simDays, seed, "Paper" as SimTier);
+  const res = runSimulation(cfg, market, simDays, seed, "Paper" as SimTier, REAL_INDEXES);
   const stress = buildStress(id, simDays, seed, cfg);
   return assembleAgent(
     inputFromAgent(agent),

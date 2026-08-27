@@ -4,9 +4,9 @@
 // 美股/加密 + A 股锚点（自定义 drift/vol 优先，未在基础池的实盘标的自动并入）。
 
 import { makeRng, gaussian } from "./rng";
-import { REAL_MARKET, REAL_MARKET_NAMES } from "@/data/market-real";
+import { REAL_MARKET, REAL_MARKET_NAMES, REAL_INDEXES } from "@/data/market-real";
 
-export type MarketKind = "A股" | "港股" | "美股" | "加密";
+export type MarketKind = "A股" | "港股" | "美股" | "加密" | "A股指数";
 
 export interface Instrument {
   code: string;
@@ -100,6 +100,13 @@ export const BASE_INSTRUMENTS: Instrument[] = [
   { code: "KO", name: "Coca-Cola", market: "美股", start: 62, drift: 0.05, vol: 0.17 },
   { code: "BTC", name: "Bitcoin", market: "加密", start: 62000, drift: 0.5, vol: 0.75 },
   { code: "ETH", name: "Ethereum", market: "加密", start: 3400, drift: 0.45, vol: 0.85 },
+  // 大盘指数（行情由 REAL_INDEXES 真实点位驱动，start 仅为拉取失败时的 GBM 兜底起点，
+  // INSTRUMENTS 组装时会用最新真实点位覆盖）
+  { code: "sh000001", name: "上证指数", market: "A股指数", start: 3900, drift: 0.06, vol: 0.16 },
+  { code: "sz399001", name: "深证成指", market: "A股指数", start: 13800, drift: 0.07, vol: 0.2 },
+  { code: "sz399006", name: "创业板指", market: "A股指数", start: 3400, drift: 0.08, vol: 0.24 },
+  { code: "sh000300", name: "沪深300", market: "A股指数", start: 4580, drift: 0.06, vol: 0.18 },
+  { code: "sh000905", name: "中证500", market: "A股指数", start: 7750, drift: 0.07, vol: 0.22 },
 ];
 
 // 实盘标的自动并入：排行榜动态标的（REAL_MARKET_NAMES 驱动）不在基础池时补入，
@@ -123,7 +130,18 @@ function mergeRealInstruments(): Instrument[] {
   return [...BASE_INSTRUMENTS, ...extra];
 }
 
-export const INSTRUMENTS: Instrument[] = mergeRealInstruments();
+// 指数标的最新点位覆盖：真实行情缺失时保留 BASE 兜底 start
+function withRealIndexStart(list: Instrument[]): Instrument[] {
+  return list.map((i) => {
+    if (i.market !== "A股指数") return i;
+    const bars = REAL_INDEXES[i.code];
+    const last = bars?.[bars.length - 1]?.[2];
+    if (typeof last === "number" && Number.isFinite(last)) return { ...i, start: last };
+    return i;
+  });
+}
+
+export const INSTRUMENTS: Instrument[] = withRealIndexStart(mergeRealInstruments());
 
 export const INSTRUMENT_MAP: Record<string, Instrument> = Object.fromEntries(
   INSTRUMENTS.map((i) => [i.code, i])
@@ -131,6 +149,7 @@ export const INSTRUMENT_MAP: Record<string, Instrument> = Object.fromEntries(
 
 // 板块分组（UI 用）：按代码前缀推导，与榜单数据保持一致
 const BOARD_RULES: Array<[string, RegExp]> = [
+  ["大盘指数", /^(sh|sz)\d{6}/],
   ["科创板", /^688/],
   ["创业板", /^30/],
   ["沪市主板", /^60/],

@@ -2,9 +2,10 @@
 // 风控护栏在引擎内强制执行，超限订单转为 REJECT 决策（而非成交）。
 // 反前瞻：策略只能看到 ≤ 当前 day 的行情（closesUntil 已截断未来）。
 
-import { INSTRUMENT_MAP, type PriceSeries } from "./market";
+import { INSTRUMENT_MAP, type PriceSeries, type RealRow } from "./market";
 import type { StrategyConfig, StyleKey } from "./strategies";
 import { computeMetrics, type Metrics } from "./metrics";
+import { indexTrend, alignIndexBars, BENCH_INDEX, BENCH_INDEX_NAME } from "./index-market";
 
 export type Tier = "Live" | "Forward" | "Backtest" | "Paper";
 type Action = "BUY" | "SELL" | "HOLD" | "REJECT";
@@ -65,10 +66,11 @@ export function runSimulation(
   market: PriceSeries,
   simDays: number,
   seed: number,
-  tier: Tier
+  tier: Tier,
+  indexMarket?: Record<string, RealRow[]>
 ): SimResult {
   // 市场中性特殊处理：多低估值 / 空高估值 对冲篮子
-  if (cfg.style === "neutral") return runNeutral(cfg, market, simDays, tier);
+  if (cfg.style === "neutral") return runNeutral(cfg, market, simDays, tier, indexMarket);
 
   const cash0 = NAV0;
   let cash = cash0;
@@ -78,7 +80,52 @@ export function runSimulation(
   const gridState = new Map<string, number>();
   for (const c of cfg.universe) gridState.set(c, priceAt(market, c, 0));
 
+  // 大盘维度：基准指数行情对齐到与 buildMarket 相同的窗口（尾部 windowLen 根）
+  const windowLen = cfg.universe[0] ? (market[cfg.universe[0]]?.length ?? simDays) : simDays;
+  const indexBars = indexMarket?.[BENCH_INDEX] ? alignIndexBars(indexMarket[BENCH_INDEX], windowLen) : null;
+  let breakerActive = false; // 熔断是否处于生效中
+  let breakerCap = 0; // 当前生效的仓位上限
+
   for (let day = 1; day < simDays; day++) {
+
+    // 0) 大盘状态 + 熔断护栏（基准指数行情可用时生效；存量策略无 circuitBreaker → 只记状态不改仓位）
+    if (indexBars && day >= 20) {
+      const tr = indexTrend(indexBars, day);
+      if (tr) {
+        if (day % 5 === 0) {
+          const line = tr.ddFrom20 >= 0 ? "站上" : "低于";
+          decisions.push(mk(day, "HOLD", undefined, undefined, undefined,
+            `大盘: ${BENCH_INDEX_NAME} ${tr.phase} · ${line}20日线 ${(Math.abs(tr.ddFrom20) * 100).toFixed(1)}% · 距20日高点 ${(tr.ddFrom60 * 100).toFixed(1)}%`,
+            "大盘"));
+        }
+        const cb = cfg.circuitBreaker;
+        if (cb?.enabled) {
+          const cap = tr.ddFrom60 <= cb.ma60 ? cb.cap60 : tr.ddFrom20 <= cb.ma20 ? cb.cap20 : null;
+          if (cap != null && !breakerActive) {
+            breakerActive = true;
+            breakerCap = cap;
+            const r = enforceCap(market, holdings, cash, day, cap, decisions);
+            cash = r.cash;
+            decisions.push(mk(day, "HOLD", undefined, undefined, undefined,
+              `大盘熔断: ${BENCH_INDEX_NAME} ${tr.ddFrom60 <= cb.ma60 ? "跌破60日线" : `低于20日线 ${(Math.abs(tr.ddFrom20) * 100).toFixed(1)}%`}，总仓位上限降至 ${(cap * 100).toFixed(0)}%（当前 ${(r.mvBefore / r.navBefore * 100).toFixed(0)}%）`,
+              "风控"));
+          } else if (breakerActive) {
+            // 解除需回到触发级别之上（滞回，避免边缘反复开关）：60 日线熔断须站回 60 日线，20 日线熔断须站回 20 日线
+            const released = breakerCap === cb.cap60 ? tr.ddFrom60 > cb.ma60 : tr.ddFrom20 > cb.ma20;
+            if (released) {
+              breakerActive = false;
+              decisions.push(mk(day, "HOLD", undefined, undefined, undefined,
+                `大盘熔断解除: ${BENCH_INDEX_NAME} ${breakerCap === cb.cap60 ? "重新站上60日线" : "重新站上20日线"}，仓位限制恢复`,
+                "风控"));
+            } else {
+              // 熔断持续中：仓位仍超限则继续等比例压降（不重复刷事件）
+              const r = enforceCap(market, holdings, cash, day, breakerCap, decisions);
+              cash = r.cash;
+            }
+          }
+        }
+      }
+    }
 
     // 1) 回撤止损（护栏）——卖出同样走撮合（滑点 + 手续费）
     for (const [code, h] of [...holdings]) {
@@ -279,7 +326,7 @@ function styleSignals(
 
 // ---------- 中性策略（多/空篮子，预建） ----------
 
-function runNeutral(cfg: StrategyConfig, market: PriceSeries, simDays: number, tier: Tier): SimResult {
+function runNeutral(cfg: StrategyConfig, market: PriceSeries, simDays: number, tier: Tier, indexMarket?: Record<string, RealRow[]>): SimResult {
   const longC = cfg.universe[0];
   const shortC = cfg.universe[1];
   const longNotional = 0.6 * NAV0;
@@ -298,6 +345,20 @@ function runNeutral(cfg: StrategyConfig, market: PriceSeries, simDays: number, t
     mk(2, "HOLD", undefined, undefined, undefined, "日内对冲平衡，净值平稳", "规则"),
     mk(5, "REJECT", undefined, undefined, undefined, "加杠杆被拒：超过 1.5x 上限", "风控"),
   ];
+  // 大盘状态事件（中性策略只记录不强制减仓）
+  const windowLen = market[cfg.universe[0]]?.length ?? simDays;
+  const indexBars = indexMarket?.[BENCH_INDEX] ? alignIndexBars(indexMarket[BENCH_INDEX], windowLen) : null;
+  if (indexBars) {
+    for (let d = 20; d < simDays; d += 5) {
+      const tr = indexTrend(indexBars, d);
+      if (tr) {
+        decisions.push(mk(d, "HOLD", undefined, undefined, undefined,
+          `大盘: ${BENCH_INDEX_NAME} ${tr.phase} · ${tr.ddFrom20 >= 0 ? "站上" : "低于"}20日线 ${(Math.abs(tr.ddFrom20) * 100).toFixed(1)}%`,
+          "大盘"));
+      }
+    }
+  }
+  decisions.sort((a, b) => a.day - b.day);
   const positions = [
     { code: "多头", name: "一篮子低估值", qty: "—", price: "—", mv: fmtMoney(longQty * priceAt(market, longC, simDays - 1)) },
     { code: "空头", name: "一篮子高估值", qty: "—", price: "—", mv: fmtMoney(-(shortQty * priceAt(market, shortC, simDays - 1))) },
@@ -306,6 +367,42 @@ function runNeutral(cfg: StrategyConfig, market: PriceSeries, simDays: number, t
 }
 
 // ---------- 工具 ----------
+
+// 大盘熔断等比例减仓：总仓位强制降至 cap × NAV（卖出走撮合：滑点 + 手续费 + 跌停约束）
+function enforceCap(
+  market: PriceSeries,
+  holdings: Map<string, Holding>,
+  cash: number,
+  day: number,
+  cap: number,
+  decisions: RawDecision[]
+): { cash: number; mvBefore: number; navBefore: number } {
+  const navBefore = navValue(market, holdings, cash, day);
+  const mvBefore = navBefore - cash;
+  const targetMv = cap * navBefore;
+  if (mvBefore <= targetMv) return { cash, mvBefore, navBefore };
+  for (const [code, h] of [...holdings]) {
+    if (mvBefore <= targetMv) break;
+    const p = priceAt(market, code, day);
+    if (p <= 0) continue;
+    const mvI = h.qty * p;
+    const targetI = targetMv * (mvI / mvBefore);
+    const exec = p * (1 - slipOf(code));
+    const maxSell = Math.max(0, Math.floor((mvI - targetI) / exec));
+    if (maxSell <= 0) continue;
+    if (limitStatus(market, code, day) === "DOWN") {
+      decisions.push(mk(day, "REJECT", code, p, undefined, `${INSTRUMENT_MAP[code]?.name ?? code} 跌停无法卖出，熔断减仓挂单顺延`, "风控"));
+      continue;
+    }
+    const qty = Math.min(maxSell, h.qty);
+    const fee = qty * exec * feeOf(code);
+    cash += qty * exec - fee;
+    decisions.push(mk(day, "SELL", code, p, qty, `${INSTRUMENT_MAP[code]?.name ?? code} 大盘熔断降仓：卖出 ${fmtQty(code, qty)} ${INSTRUMENT_MAP[code]?.market === "加密" ? "枚" : "股"}`, "风控"));
+    if (qty >= h.qty) holdings.delete(code);
+    else holdings.set(code, { qty: h.qty - qty, cost: h.cost });
+  }
+  return { cash, mvBefore, navBefore };
+}
 
 function navValue(market: PriceSeries, holdings: Map<string, Holding>, cash: number, day: number): number {
   let v = cash;

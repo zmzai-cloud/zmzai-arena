@@ -6,6 +6,7 @@
 // 纯函数、无外部依赖，可被 esbuild 打包进沙箱单文件。
 
 import { generateMarket, type PriceSeries } from "../sim/market";
+import { REAL_INDEXES } from "../data/market-real";
 import { runSimulation, type SimResult, type Tier } from "../sim/engine";
 import { attributeReturn, type Attribution } from "../sim/attribution";
 import { certifyRobustness, type RobustnessCert } from "../sim/robustness";
@@ -38,7 +39,8 @@ export interface BacktestResult {
 
 export function assembleBacktestResult(input: BacktestInput): BacktestResult {
   const market = generateMarket(input.marketDays ?? MARKET_DAYS, input.marketSeed ?? GLOBAL_SEED);
-  const res = runSimulation(input.cfg, market, input.simDays, input.seed, input.tier);
+  // 第 6 参 indexMarket：注入真实指数行情，大盘状态事件 + 熔断护栏仅在 cfg.circuitBreaker 启用时生效
+  const res = runSimulation(input.cfg, market, input.simDays, input.seed, input.tier, REAL_INDEXES);
   const spec: SimSpec = { id: input.cfg.id, tier: input.tier, simDays: input.simDays, seed: input.seed };
   return {
     engine: "local",

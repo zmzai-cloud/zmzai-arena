@@ -5,7 +5,8 @@
 // 未来可把策略执行这一步替换为真实 zmzai-sandbox 调用，数据契约不变。
 
 import { buildMarket, tradeCalendar, INSTRUMENT_MAP } from "@/sim/market";
-import { REAL_MARKET, REAL_MARKET_META } from "@/data/market-real";
+import { REAL_MARKET, REAL_MARKET_META, REAL_INDEXES } from "@/data/market-real";
+import { BENCH_INDEX, excessOf, windowReturn, type Excess } from "@/sim/index-market";
 import { STRATEGIES, type StrategyConfig } from "@/sim/strategies";
 import { runSimulation, type Tier as SimTier, type RawDecision } from "@/sim/engine";
 import { type RiskPillar } from "@/sim/metrics";
@@ -68,13 +69,15 @@ export interface Agent {
   sandboxRunId?: string; // 沙箱回测的运行 ID（可追溯审计）
   cfg?: StrategyConfig; // 完整策略配置：详情页可一键重新验证（每次消耗一次回测配额）
   simDays?: number; // 引擎模拟天数：与展示 days 解耦，重新验证按此周期重跑（保证与档案基准可比）
+  excess?: Excess | null; // 相对沪深300 的超额收益（同引擎窗口；指数数据缺失时为 null）
 }
 
 // 全市场行情只生成一次（确定性种子）：A 股标的替换为真实日 K（前复权，
-// 见 src/data/market-real.ts），其余市场保持 GBM 模拟；所有智能体共用同一段行情
+// 见 src/data/market-real.ts），大盘指数替换为真实点位，其余市场保持 GBM 模拟；
+// 所有智能体共用同一段行情
 const GLOBAL_SEED = 20260825;
 const MARKET_DAYS = 360;
-export const market = buildMarket(MARKET_DAYS, GLOBAL_SEED, REAL_MARKET);
+export const market = buildMarket(MARKET_DAYS, GLOBAL_SEED, { ...REAL_MARKET, ...REAL_INDEXES });
 // 真实交易日历（day 索引 → YYYY-MM-DD），供决策日志展示真实日期
 export const tradeDates: string[] = tradeCalendar(market);
 // 实盘数据元信息（数据源/最新交易日），供 UI 标注「数据源」
@@ -376,7 +379,11 @@ function stressFor(agentId: number): Record<string, AgentStress> {
 
 export const agents: Agent[] = META.map((m) => {
   const cfg = STRATEGIES.find((s) => s.id === m.id)!;
+  // 存量 Agent 不传指数行情：决策日志/收益/存证与历史完全一致（大盘事件仅新策略可见）
   const res = runSimulation(cfg, market, m.simDays, m.seed, m.tier as SimTier);
+  // 超额收益：vs 沪深300 同引擎窗口（基准指数缺失时不展示）
+  const bench = REAL_INDEXES[BENCH_INDEX];
+  const excess = excessOf(res.metrics.totalReturn, bench ? windowReturn(bench, MARKET_DAYS, m.simDays) : null);
   const a: Agent = {
     id: m.id,
     emoji: m.emoji,
@@ -406,6 +413,7 @@ export const agents: Agent[] = META.map((m) => {
     engine: "local", // 官方基准：平台本地引擎（与沙箱同一份源码、含撮合成本），非隔离沙箱执行
     cfg, // 官方 Agent 同样可重新验证（结果在沙箱中重跑，与档案基准对照）
     simDays: m.simDays, // 引擎模拟天数（重验证基准周期）
+    excess,
   };
   a.integrityHash = computeIntegrityHash(a);
   return a;

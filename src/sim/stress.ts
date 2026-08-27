@@ -35,7 +35,7 @@ export const STRESS_SCENARIOS: StressScenario[] = [
     trough: 50,
     recover: 110,
     rebound: 0.3,
-    troughMul: { "A股": 0.45, "港股": 0.6, "美股": 0.9, "加密": 1.08 },
+    troughMul: { "A股": 0.45, "港股": 0.6, "美股": 0.9, "加密": 1.08, "A股指数": 0.45 },
   },
   {
     id: "bear2018",
@@ -46,7 +46,7 @@ export const STRESS_SCENARIOS: StressScenario[] = [
     trough: 220,
     recover: 300,
     rebound: 0.05,
-    troughMul: { "A股": 0.5, "港股": 0.55, "美股": 1.0, "加密": 0.2 },
+    troughMul: { "A股": 0.5, "港股": 0.55, "美股": 1.0, "加密": 0.2, "A股指数": 0.5 },
   },
   {
     id: "covid2020",
@@ -57,7 +57,7 @@ export const STRESS_SCENARIOS: StressScenario[] = [
     trough: 50,
     recover: 120,
     rebound: 0.9,
-    troughMul: { "A股": 0.8, "港股": 0.78, "美股": 0.55, "加密": 0.4 },
+    troughMul: { "A股": 0.8, "港股": 0.78, "美股": 0.55, "加密": 0.4, "A股指数": 0.8 },
   },
 ];
 

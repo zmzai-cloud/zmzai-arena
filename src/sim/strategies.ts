@@ -10,6 +10,24 @@ export type StyleKey =
   | "dca" // 定投：固定周期买宽基
   | "neutral"; // 市场中性：多低估值/空高估值对冲
 
+// 大盘熔断护栏：基准指数（沪深300）收盘跌破 20/60 日均线阈值时，总仓位强制降至对应上限
+// （新创建策略默认开启；存量 Agent 不含此字段 → 行为/存证不变）
+export interface CircuitBreaker {
+  enabled: boolean;
+  ma20: number; // 收盘低于 20 日线幅度阈值（如 -0.03 = 跌破 3%）
+  cap20: number; // 触发后总仓位上限（0.3 = 30%）
+  ma60: number; // 收盘低于 60 日线幅度阈值（0 = 收盘跌破 60 日线即触发）
+  cap60: number; // 触发后总仓位上限（0.1 = 10%）
+}
+
+export const DEFAULT_CIRCUIT_BREAKER: CircuitBreaker = {
+  enabled: true,
+  ma20: -0.03,
+  cap20: 0.3,
+  ma60: 0,
+  cap60: 0.1,
+};
+
 export interface StrategyConfig {
   id: number;
   style: StyleKey;
@@ -20,6 +38,7 @@ export interface StrategyConfig {
   stopDD: number; // 持仓回撤止损（护栏）
   rebalance: number; // 调仓周期（天）
   aggr: number; // 策略攻击性 0-50（计入风险分：越高越激进→风险分越低）
+  circuitBreaker?: CircuitBreaker; // 大盘熔断护栏（缺省 = 不启用，存量策略兼容）
 }
 
 // 10 个智能体的策略参数（与产品原型里的人设/护栏一一对应）
