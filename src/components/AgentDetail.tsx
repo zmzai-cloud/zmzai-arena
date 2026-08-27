@@ -11,7 +11,7 @@ import { useIsFollowed, toggleFollow } from "@/lib/follows";
 import type { StressStatus } from "@/sim/stress";
 import type { RobustnessLabel } from "@/sim/robustness";
 import { REAL_INDEXES } from "@/data/market-real";
-import { BENCH_INDEX, BENCH_INDEX_NAME } from "@/sim/index-market";
+import { BENCH_INDEX, BENCH_INDEX_NAME, MARKET_DAYS } from "@/sim/index-market";
 import { medalsOf, historyOf, loadSeasonSnapshots, MEDAL_LABEL, medalCls, leagueCls, LEAGUE_LABEL, leagueOf } from "@/lib/season";
 
 // 验证档案页：受众是投资小白，核心动作是「验证一个 Agent 再决定要不要跟」
@@ -747,10 +747,12 @@ function NavVsBench({ nav }: { nav: number[] }) {
   const H = 200;
   const PAD = { l: 42, r: 10, t: 8, b: 20 };
   const bench = REAL_INDEXES[BENCH_INDEX];
-  const n = Math.min(nav.length, bench?.length ?? nav.length);
+  // 基准与策略同窗口：行情窗口末 MARKET_DAYS 根中的前 n 根（与引擎 simDays 窗口对齐，非末 n 根）
+  const aligned = bench ? bench.slice(-MARKET_DAYS) : null;
+  const n = Math.min(nav.length, aligned?.length ?? nav.length);
   const navRet = nav.slice(0, n).map((v) => (v / nav[0] - 1) * 100);
-  const benchRet = bench
-    ? bench.slice(-n).map((b) => (b[2] / bench[bench.length - n][2] - 1) * 100)
+  const benchRet = aligned
+    ? aligned.slice(0, n).map((b) => (b[2] / aligned[0][2] - 1) * 100)
     : [];
   if (navRet.length < 2 || benchRet.length < 2) return null;
   const all = [...navRet, ...benchRet, 0];

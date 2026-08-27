@@ -8,13 +8,15 @@
 import { generateMarket, type PriceSeries } from "../sim/market";
 import { REAL_INDEXES } from "../data/market-real";
 import { runSimulation, type SimResult, type Tier } from "../sim/engine";
+import { MARKET_DAYS } from "../sim/index-market";
 import { attributeReturn, type Attribution } from "../sim/attribution";
 import { certifyRobustness, type RobustnessCert } from "../sim/robustness";
 import { stressForConfig, type AgentStress, type SimSpec } from "../sim/stress";
 import type { StrategyConfig } from "../sim/strategies";
 
-// 与 src/data/agents.ts 的 GLOBAL_SEED / MARKET_DAYS 保持一致（同一段可复现行情）
-export const MARKET_DAYS = 360;
+// 与 src/data/agents.ts 的 GLOBAL_SEED / MARKET_DAYS 保持一致（同一段可复现行情）；
+// MARKET_DAYS 唯一常量源在 sim/index-market.ts
+export { MARKET_DAYS };
 export const GLOBAL_SEED = 20260825;
 
 export interface BacktestInput {

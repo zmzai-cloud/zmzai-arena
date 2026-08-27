@@ -70,6 +70,8 @@ export function IndexTicker() {
       <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded border border-line bg-line sm:grid-cols-3 lg:grid-cols-5">
         {rows.map((r) => {
           const bars = r.bars;
+          // 指数拉取允许部分失败，缺失时不渲染该卡片（防整页崩溃）
+          if (!bars || bars.length < 2) return null;
           const last = bars[bars.length - 1];
           const prev = bars[bars.length - 2];
           const chg = prev ? last[2] / prev[2] - 1 : 0;

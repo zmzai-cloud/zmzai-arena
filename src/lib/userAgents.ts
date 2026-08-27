@@ -9,6 +9,7 @@ import { INSTRUMENT_MAP } from "@/sim/market";
 import { runSimulation, type RawDecision, type Tier as SimTier } from "@/sim/engine";
 import { DEFAULT_CIRCUIT_BREAKER, type StrategyConfig, type StyleKey } from "@/sim/strategies";
 import { REAL_INDEXES } from "@/data/market-real";
+import { BENCH_INDEX, excessOf, windowReturn, MARKET_DAYS } from "@/sim/index-market";
 import { stressForConfig, type AgentStress, type SimSpec } from "@/sim/stress";
 import { attributeReturn, type Attribution } from "@/sim/attribution";
 import { certifyRobustness, type RobustnessCert } from "@/sim/robustness";
@@ -156,6 +157,10 @@ function assembleAgent(input: CreateAgentInput, creator: string, id: number, sim
   const marketLabel = universe.length ? INSTRUMENT_MAP[universe[0]]?.market ?? "A股" : "A股";
   const cfg = cfgOverride ?? buildCfg(input, id);
 
+  // 超额收益：vs 沪深300 同引擎窗口（与官方 Agent 同口径；totalReturn 百分比转小数）
+  const bench = REAL_INDEXES[BENCH_INDEX];
+  const excess = excessOf(parts.metrics.totalReturn / 100, bench ? windowReturn(bench, MARKET_DAYS, simDays) : null);
+
   const a: Agent = {
     id,
     emoji: input.emoji || "🤖",
@@ -172,6 +177,7 @@ function assembleAgent(input: CreateAgentInput, creator: string, id: number, sim
     riskBreakdown: parts.metrics.riskBreakdown,
     attribution: parts.attribution,
     robustness: parts.robustness,
+    excess, // vs 沪深300 超额（小数，不入存证指纹）
     integrityHash: "",
     days: simDays,
     followers: 0,

@@ -8,6 +8,9 @@ import type { RealRow } from "./market";
 export const BENCH_INDEX = "sh000300";
 export const BENCH_INDEX_NAME = "沪深300";
 
+// 引擎行情窗口长度（与 buildMarket / 官方 Agent 组装一致，全站唯一常量源）
+export const MARKET_DAYS = 360;
+
 export interface IndexTrend {
   phase: "牛" | "熊" | "震荡";
   close: number;

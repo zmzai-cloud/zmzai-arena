@@ -6,7 +6,7 @@
 
 import { buildMarket, tradeCalendar, INSTRUMENT_MAP } from "@/sim/market";
 import { REAL_MARKET, REAL_MARKET_META, REAL_INDEXES } from "@/data/market-real";
-import { BENCH_INDEX, excessOf, windowReturn, type Excess } from "@/sim/index-market";
+import { BENCH_INDEX, excessOf, windowReturn, MARKET_DAYS, type Excess } from "@/sim/index-market";
 import { STRATEGIES, type StrategyConfig } from "@/sim/strategies";
 import { runSimulation, type Tier as SimTier, type RawDecision } from "@/sim/engine";
 import { type RiskPillar } from "@/sim/metrics";
@@ -77,7 +77,6 @@ export interface Agent {
 // 见 src/data/market-real.ts），大盘指数替换为真实点位，其余市场保持 GBM 模拟；
 // 所有智能体共用同一段行情
 const GLOBAL_SEED = 20260825;
-const MARKET_DAYS = 360;
 export const market = buildMarket(MARKET_DAYS, GLOBAL_SEED, { ...REAL_MARKET, ...REAL_INDEXES });
 // 真实交易日历（day 索引 → YYYY-MM-DD），供决策日志展示真实日期
 export const tradeDates: string[] = tradeCalendar(market);
@@ -382,9 +381,9 @@ export const agents: Agent[] = META.map((m) => {
   const cfg = STRATEGIES.find((s) => s.id === m.id)!;
   // 存量 Agent 不传指数行情：决策日志/收益/存证与历史完全一致（大盘事件仅新策略可见）
   const res = runSimulation(cfg, market, m.simDays, m.seed, m.tier as SimTier);
-  // 超额收益：vs 沪深300 同引擎窗口（基准指数缺失时不展示）
+  // 超额收益：vs 沪深300 同引擎窗口（基准指数缺失时不展示）；totalReturn 为百分比，统一转小数后相减
   const bench = REAL_INDEXES[BENCH_INDEX];
-  const excess = excessOf(res.metrics.totalReturn, bench ? windowReturn(bench, MARKET_DAYS, m.simDays) : null);
+  const excess = excessOf(res.metrics.totalReturn / 100, bench ? windowReturn(bench, MARKET_DAYS, m.simDays) : null);
   const a: Agent = {
     id: m.id,
     emoji: m.emoji,

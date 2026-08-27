@@ -245,7 +245,6 @@ async function main() {
   let source = null;
   let fail = 0;
   for (const { code, name } of codeList) {
-    names.set(code, name);
     let rows = null;
     const attempts = [
       ["tencent-direct", () => fetchTencent(code)],
@@ -264,6 +263,8 @@ async function main() {
     }
     if (rows) {
       series.set(code, rows);
+      // 名称只登记拉取成功的标的（失败标的若进名称表，会被 mergeRealInstruments 生成 start=10 的幽灵假标的）
+      names.set(code, name);
     } else {
       fail++;
       console.warn(`[fetch-market] ${code} 全部数据源失败，跳过`);
