@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { PLANS } from "@/lib/billing";
 import { loginUrl } from "@/lib/auth";
 
@@ -9,28 +10,31 @@ interface BillingState {
   plan: "free" | "pro";
   planName: string;
   planSince: string | null;
-  planSource: "paddle" | "afdian" | "grant" | null;
+  planSource: "paddle" | "afdian" | "xorpay" | "grant" | null;
   quota: { used: number; limit: number | null; remaining: number | null; windowEnd: string };
   perks: { maxSimDays: number; privateListings: boolean; reportExport: boolean };
 }
 
-interface AfdianPay {
-  url: string;
-  planId: string | null;
+interface XorPayPay {
+  paymentUrl: string; // 二维码内容（微信 code_url / 支付宝 H5 链接）
+  orderNumber: string;
   expiresInDays: number;
-  email: string;
-  userId: string;
+  period: "monthly" | "yearly";
+  method: "native" | "alipay";
+  expiresAt: string;
 }
 
-// 定价页交互：加载当前账户（计划/额度）→ 升级按钮按状态分流
+// 定价页交互：加载当前账户（计划/额度）→ 升级按钮打开支付弹层（微信/支付宝二选一，扫码/跳转支付，轮询自动开通）
 export function PricingClient() {
   const [user, setUser] = useState<{ id: string; name: string; email: string } | null>(null);
   const [billing, setBilling] = useState<BillingState | null>(null);
   const [busy, setBusy] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [pay, setPay] = useState<AfdianPay | null>(null);
-  const [copied, setCopied] = useState(false);
+  // pay = 弹层状态（period 定案），payData = 已创建的支付订单（未创建时先选支付方式）
+  const [pay, setPay] = useState<{ period: "monthly" | "yearly" } | null>(null);
+  const [payData, setPayData] = useState<XorPayPay | null>(null);
+  const [payBusy, setPayBusy] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -49,51 +53,59 @@ export function PricingClient() {
     };
   }, []);
 
-  async function upgrade(period: "monthly" | "yearly") {
+  function openPay(period: "monthly" | "yearly") {
     setPayError(null);
     setNotice(null);
     if (!user) {
       window.location.href = loginUrl("/pricing");
       return;
     }
-    setBusy(true);
+    setPay({ period });
+    setPayData(null);
+  }
+
+  // 创建 XorPay 支付订单（选支付方式时调用；切换方式会重新下单，旧订单 30 分钟后自动失效）
+  async function createPayment(period: "monthly" | "yearly", method: "native" | "alipay") {
+    setPayError(null);
+    setPayBusy(true);
     try {
       const res = await fetch("/api/billing/upgrade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ period }),
+        body: JSON.stringify({ period, method }),
       });
       const data = (await res.json()) as {
-        url?: string | null;
-        planId?: string | null;
+        paymentUrl?: string;
+        orderNumber?: string;
         expiresInDays?: number;
-        email?: string;
-        userId?: string;
+        expiresAt?: string;
         error?: string;
         code?: string;
       };
-      if (data.url) {
-        // 爱发电站内购买：打开引导弹层，支付完成后自动轮询检测开通
-        setPay({
-          url: data.url,
-          planId: data.planId ?? null,
-          expiresInDays: data.expiresInDays ?? 30,
-          email: data.email ?? "",
-          userId: data.userId ?? "",
-        });
-        return;
-      }
       if (res.status === 503) {
+        setPay(null);
+        setPayData(null);
         setNotice(
           "支付通道开通中。内测阶段 Pro 通过邀请发放：登录后联系 support@zmzai.cloud 附上账号 ID 即可开通。"
         );
-      } else {
-        setPayError(data.error ?? `升级失败（${res.status}）`);
+        return;
       }
+      if (res.ok && data.paymentUrl && data.orderNumber) {
+        setPayData({
+          paymentUrl: data.paymentUrl,
+          orderNumber: data.orderNumber,
+          expiresInDays: data.expiresInDays ?? (period === "yearly" ? 365 : 30),
+          period,
+          method,
+          expiresAt: data.expiresAt ?? "",
+        });
+        return;
+      }
+      setPayError(data.error ?? `创建支付失败（${res.status}）`);
     } catch {
       setPayError("网络异常，请稍后再试");
     } finally {
-      setBusy(false);
+      setPayBusy(false);
     }
   }
 
@@ -110,6 +122,7 @@ export function PricingClient() {
         if (alive && d.account?.plan === "pro") {
           clearInterval(timer);
           setPay(null);
+          setPayData(null);
           window.location.reload();
         }
       } catch {
@@ -125,6 +138,8 @@ export function PricingClient() {
   }, [pay]);
 
   const isPro = billing?.plan === "pro";
+  const periodLabel = pay?.period === "yearly" ? "年付" : "月付";
+  const periodPrice = pay?.period === "yearly" ? PLANS.pro.priceYearly : PLANS.pro.priceMonthly;
 
   return (
     <div className="mt-8 grid gap-5 md:grid-cols-2">
@@ -190,14 +205,14 @@ export function PricingClient() {
           ) : (
             <div className="space-y-2">
               <button
-                onClick={() => upgrade("monthly")}
+                onClick={() => openPay("monthly")}
                 disabled={busy}
                 className="w-full rounded bg-accent py-2.5 text-[14px] font-semibold text-accent-ink transition-colors hover:opacity-90 disabled:opacity-50"
               >
                 {busy ? "正在生成支付链接…" : user ? "升级 Pro · ¥29/月" : "登录后升级"}
               </button>
               <button
-                onClick={() => upgrade("yearly")}
+                onClick={() => openPay("yearly")}
                 disabled={busy}
                 className="w-full rounded border border-accent py-2 text-[13px] font-semibold text-accent transition-colors hover:bg-accent/10 disabled:opacity-50"
               >
@@ -210,57 +225,95 @@ export function PricingClient() {
         </div>
       </div>
 
-      {/* 支付弹层：爱发电站内购买，支付完成后轮询自动开通 */}
+      {/* 支付弹层：XorPay 微信/支付宝二选一 → 二维码/跳转支付 → 轮询自动开通 */}
       {pay && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setPay(null)}
+          onClick={() => {
+            setPay(null);
+            setPayData(null);
+          }}
         >
           <div
             className="w-full max-w-sm border border-line bg-surface p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between">
-              <div className="num text-[11px] tracking-[0.14em] text-ink-3">爱发电支付</div>
+              <div className="num text-[11px] tracking-[0.14em] text-ink-3">
+                支付 Pro · {periodLabel} ¥{periodPrice}
+              </div>
               <button
-                onClick={() => setPay(null)}
+                onClick={() => {
+                  setPay(null);
+                  setPayData(null);
+                }}
                 className="text-ink-3 transition-colors hover:text-ink-1"
                 aria-label="关闭支付窗口"
               >
                 ✕
               </button>
             </div>
-            <div className="mt-4 rounded border border-line bg-surface p-3">
-              <div className="num text-[11px] tracking-[0.1em] text-ink-3">开通 {pay.expiresInDays} 天 Pro · 请复制邮箱</div>
-              <div className="mt-1.5 flex items-center justify-between gap-2">
-                <span className="truncate text-[13px] font-semibold text-ink-1">{pay.email}</span>
+
+            {!payData ? (
+              /* 第一步：选择支付方式 */
+              <div className="mt-5 space-y-2.5">
+                <button
+                  onClick={() => void createPayment(pay.period, "native")}
+                  disabled={payBusy}
+                  className="w-full rounded border border-accent bg-accent/5 py-3 text-center text-[14px] font-semibold text-accent transition-colors hover:bg-accent/10 disabled:opacity-50"
+                >
+                  微信支付（扫码）
+                </button>
+                <button
+                  onClick={() => void createPayment(pay.period, "alipay")}
+                  disabled={payBusy}
+                  className="w-full rounded border border-line py-3 text-center text-[14px] font-semibold text-ink-1 transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                >
+                  支付宝（App 跳转）
+                </button>
+                {payBusy && (
+                  <div className="num text-center text-[11.5px] text-ink-3">正在创建支付订单…</div>
+                )}
+                <p className="text-center text-[12px] leading-relaxed text-ink-2">
+                  支付完成后本页面将自动检测并开通 Pro
+                </p>
+              </div>
+            ) : (
+              /* 第二步：展示二维码/支付链接 */
+              <div className="mt-5">
+                <div className="flex justify-center rounded border border-line bg-white p-4">
+                  <QRCodeSVG value={payData.paymentUrl} size={176} level="M" />
+                </div>
+                <div className="num mt-3 text-center text-[12px] text-ink-1">
+                  {payData.method === "native"
+                    ? "使用微信「扫一扫」完成支付"
+                    : "使用支付宝「扫一扫」或点击下方链接"}
+                </div>
+                <a
+                  href={payData.paymentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 block w-full rounded bg-accent py-2.5 text-center text-[14px] font-semibold text-accent-ink transition-colors hover:opacity-90"
+                >
+                  打开支付链接 ↗
+                </a>
+                <div className="num mt-3 flex items-center justify-between text-[11px] text-ink-3">
+                  <span>订单号:{payData.orderNumber}</span>
+                  <span>30 分钟内有效</span>
+                </div>
                 <button
                   onClick={() => {
-                    void navigator.clipboard?.writeText(pay.email).catch(() => {});
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1500);
+                    setPayData(null);
+                    setPayError(null);
                   }}
-                  className="shrink-0 rounded border border-line px-2 py-1 text-[11.5px] text-ink-2 transition-colors hover:border-accent hover:text-accent"
+                  disabled={payBusy}
+                  className="mt-3 w-full rounded border border-line py-2 text-center text-[12.5px] text-ink-2 transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                 >
-                  {copied ? "已复制 ✓" : "复制"}
+                  更换支付方式
                 </button>
+                {payError && <div className="mt-3 text-[12.5px] text-danger">{payError}</div>}
               </div>
-            </div>
-            <a
-              href={pay.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-4 block w-full rounded bg-accent py-2.5 text-center text-[14px] font-semibold text-accent-ink transition-colors hover:opacity-90"
-            >
-              前往爱发电支付 ↗
-            </a>
-            <p className="mt-3 text-[12.5px] leading-relaxed text-ink-2">
-              在爱发电页面完成支付时，<span className="font-semibold text-ink-1">请在留言中粘贴上面的邮箱</span>
-              ，支付完成后本页面会自动检测并开通 Pro（约 1 分钟内）。
-            </p>
-            <div className="num mt-3 text-center text-[11px] text-ink-3">
-              Arena ID:{pay.userId}（留言填邮箱即可，无需此 ID）
-            </div>
+            )}
           </div>
         </div>
       )}

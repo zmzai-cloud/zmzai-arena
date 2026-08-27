@@ -1,131 +1,83 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PLAN, PLANS } from "@/lib/billing";
+import { PLAN } from "@/lib/billing";
 import {
   setPlan,
   getAccount,
   markOrderProcessed,
-  findUserIdByEmail,
-  recordUnmatchedOrder,
+  findPendingOrder,
+  removePendingOrder,
+  isOrderProcessed,
   BillingStoreError,
 } from "@/lib/billing-store";
-import {
-  afdianConfig,
-  decryptAfdianEvent,
-  parseWebhookPayload,
-  queryAfdianOrder,
-  matchPeriod,
-  resolveMatcher,
-  type AfdianOrder,
-} from "@/lib/afdian";
+import { xorpayConfig, verifyXorPayCallback } from "@/lib/xorpay";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// 爱发电支付回调（POST JSON，body.event 为 AES 加密，兼容测试按钮的明文格式）：
-// 解密/解析 → query-order 反查确认（防伪造关键）→ 校验状态/金额/周期 → 留言对账 → 幂等落账。
-// 响应必须为 JSON {"ec":200,"em":""}（爱发电仅校验 ec===200，非 200 视为失败）。
+// XorPay 支付回调（POST form-urlencoded，官方商户接口带签名，无需反查）：
+// 验签 → 查 pending 订单（order_id 关联用户/周期/金额）→ 金额校验 → 幂等落账 → 移除 pending。
+// 响应 "success" 200（XorPay 回调约定），验签失败 400，落账失败 503 触发网关重试不丢单。
 export async function POST(req: NextRequest) {
-  const cfg = afdianConfig();
+  const cfg = xorpayConfig();
   if (!cfg) {
-    return NextResponse.json({ ec: 500, em: "payment not configured" }, { status: 503 });
+    return new NextResponse("provider unavailable", { status: 503 });
   }
 
-  // 1. 解析 body：event 加密（官方）或明文 data.order（后台测试按钮）
-  let rawBody: unknown;
+  const rawBody = await req.text();
+  if (rawBody.length === 0 || rawBody.length > 16_384) {
+    return new NextResponse("invalid payload", { status: 400 });
+  }
+
+  // 1. 验签并解析（签名无效/缺参直接拒绝，不落账）
+  let payment;
   try {
-    rawBody = await req.json();
-  } catch {
-    return NextResponse.json({ ec: 400, em: "invalid json" }, { status: 400 });
+    payment = verifyXorPayCallback(rawBody, cfg.appSecret);
+  } catch (e) {
+    console.error("[billing] xorpay 回调验签失败：", e instanceof Error ? e.message : e);
+    return new NextResponse("invalid signature or payload", { status: 400 });
   }
-  let order: AfdianOrder | null = null;
-  if (typeof rawBody === "object" && rawBody !== null && "event" in rawBody) {
-    const event = (rawBody as { event?: unknown }).event;
-    if (typeof event !== "string" || !event) {
-      return NextResponse.json({ ec: 400, em: "invalid event" }, { status: 400 });
+
+  // 2. 查 pending 订单：order_id 是我方下单时生成的，关联登录用户/周期/金额
+  const pending = findPendingOrder(payment.orderNumber);
+  if (!pending) {
+    // 订单不存在/已过期：若已落账（网关重试的重复回调）返回 200 确认幂等，否则可能是伪造，拒绝
+    if (isOrderProcessed(payment.orderNumber)) {
+      return new NextResponse("success", { status: 200 });
     }
-    const plain = decryptAfdianEvent(event, cfg.token);
-    if (!plain) {
-      // 密文损坏 / token 不匹配：可能是伪造或配置错误，拒绝
-      return NextResponse.json({ ec: 400, em: "decrypt failed" }, { status: 400 });
-    }
-    try {
-      order = parseWebhookPayload(JSON.parse(plain));
-    } catch {
-      return NextResponse.json({ ec: 400, em: "bad payload" }, { status: 400 });
-    }
-  } else {
-    order = parseWebhookPayload(rawBody);
-  }
-  if (!order) {
-    return NextResponse.json({ ec: 400, em: "no order" }, { status: 400 });
+    return new NextResponse("order not found", { status: 400 });
   }
 
-  // 2. query-order 反查：确认订单真实存在（webhook 无独立签名，必须反查防伪造）
-  let remote: AfdianOrder | null;
-  try {
-    remote = await queryAfdianOrder(cfg, order.outTradeNo);
-  } catch {
-    // 反查服务不可达：暂不落账，返回 500 期望平台重试
-    return NextResponse.json({ ec: 500, em: "query-order unavailable" }, { status: 500 });
-  }
-  if (!remote) {
-    return NextResponse.json({ ec: 500, em: "order not found" }, { status: 500 });
-  }
-  order = remote;
-
-  // 3. 非成功订单（退款/取消）不落账：爱发电仅推送 status=2，防御性过滤
-  if (order.status !== 2) {
-    return NextResponse.json({ ec: 200, em: "ok" });
-  }
-
-  // 4. 周期判定 + 金额校验：plan_id 匹配配置方案，或金额等于定价（双保险）
-  const period = matchPeriod(order, cfg);
-  if (!period) {
-    return NextResponse.json({ ec: 400, em: "unknown plan" }, { status: 400 });
-  }
-  const expect = period === "yearly" ? PLANS.pro.priceYearly : PLANS.pro.priceMonthly;
-  if (Math.abs(Number(order.totalAmount) - expect) > 0.001) {
-    return NextResponse.json({ ec: 400, em: "amount mismatch" }, { status: 400 });
-  }
-
-  // 5. 对账：留言优先 zmz:<userId>，其次邮箱（需登录过 arena 才会在索引中）
-  const matcher = resolveMatcher(order.userPrivate || order.remark);
-  let userId: string | null = null;
-  if (matcher) {
-    if ("userId" in matcher) userId = matcher.userId;
-    else userId = findUserIdByEmail(matcher.email);
-  }
-  if (!userId) {
-    // 无法自动对账：记录待人工清单（管理员在爱发电后台核对留言后发放），不阻塞平台
-    recordUnmatchedOrder(order.outTradeNo, order.totalAmount, order.userPrivate || order.remark);
-    return NextResponse.json({ ec: 200, em: "unmatched, manual review" });
+  // 3. 金额校验：回调实付必须等于下单金额（防篡改/串单）
+  if (Math.abs(payment.amount - pending.amount) > 0.001) {
+    return new NextResponse("amount mismatch", { status: 400 });
   }
 
   try {
-    // 6. 幂等：按爱发电订单号去重（平台重试/多事件推送不重复落账）
-    if (!markOrderProcessed(order.outTradeNo, `user:${userId}`, period)) {
-      return NextResponse.json({ ec: 200, em: "ok" });
+    // 4. 幂等：同订单号重复回调（网关重试）不重复落账
+    if (!markOrderProcessed(payment.orderNumber, pending.key, pending.period)) {
+      return new NextResponse("success", { status: 200 });
     }
-    // 7. 续费叠加：Pro 未到期时从到期日顺延，到期后从当前时间起算
-    const key = `user:${userId}`;
-    const acc = getAccount(key);
+    // 5. 续费叠加：Pro 未到期时从到期日顺延，到期后从当前时间起算
+    const acc = getAccount(pending.key);
     const base =
       acc.plan === "pro" && acc.expiresAt && new Date(acc.expiresAt).getTime() > Date.now()
         ? new Date(acc.expiresAt).getTime()
         : Date.now();
-    const days = period === "yearly" ? 365 : 30;
-    setPlan(key, PLAN.PRO, "afdian", new Date(base + days * 86_400_000).toISOString());
+    const days = pending.period === "yearly" ? 365 : 30;
+    setPlan(pending.key, PLAN.PRO, "xorpay", new Date(base + days * 86_400_000).toISOString());
+    // 6. 落账成功后移除 pending（残留不影响幂等）
+    removePendingOrder(payment.orderNumber);
   } catch (e) {
     if (e instanceof BillingStoreError) {
-      // 落账失败返回非 200：平台侧可重试，不丢单
-      return NextResponse.json({ ec: 500, em: "store error" }, { status: 503 });
+      // 落账失败返回非 200：网关重试，不丢单
+      return new NextResponse("store error", { status: 503 });
     }
     throw e;
   }
 
-  return NextResponse.json({ ec: 200, em: "ok" });
+  return new NextResponse("success", { status: 200 });
 }
 
 export function GET() {
-  return NextResponse.json({ ok: true, provider: "afdian" });
+  return NextResponse.json({ ok: true, provider: "xorpay" });
 }

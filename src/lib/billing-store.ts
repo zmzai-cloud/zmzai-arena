@@ -9,22 +9,29 @@ export interface Account {
   userId: string;
   plan: Plan;
   planSince: string | null; // ISO
-  planSource: "paddle" | "afdian" | "grant" | null; // paddle 为历史数据兼容
+  planSource: "paddle" | "afdian" | "xorpay" | "grant" | null; // paddle/afdian 为历史数据兼容
   expiresAt: string | null; // Pro 到期时间（ISO），到期自动降级 free；null = 永久
   quota: { windowEnd: string; used: number }; // 滚动 30 天窗口（到 windowEnd 过期重置）
   createdAt: string;
 }
 
+export interface PendingOrder {
+  key: string; // user:<userId>，回调时直接关联，无需留言对账
+  period: "monthly" | "yearly";
+  amount: number; // 元
+  method: "native" | "alipay";
+  createdAt: string;
+  expiresAt: string; // XorPay 订单 30 分钟有效
+}
+
 const FILE = "accounts.json";
 const ORDERS_FILE = "orders.json";
-const EMAIL_INDEX_FILE = "email-index.json"; // 登录邮箱 → userId 映射（爱发电留言对账用）
-const UNMATCHED_FILE = "unmatched.json"; // 爱发电订单无法对账（留言缺失/邮箱不存在），人工处理清单
+const PENDING_FILE = "pending.json"; // 待支付订单（upgrade 创建，webhook 落账后移除）
 const GLOBAL = globalThis as typeof globalThis & {
   __arenaBillingDir?: string;
   __arenaBillingCache?: Map<string, Account>;
   __arenaOrdersCache?: Map<string, { key: string; period: string; ts: string }>;
-  __arenaEmailCache?: Map<string, string>;
-  __arenaUnmatchedCache?: Map<string, { outTradeNo: string; amount: string; remark: string; ts: string }>;
+  __arenaPendingCache?: Map<string, PendingOrder>;
 };
 
 function dataDir(): string {
@@ -207,102 +214,76 @@ function loadOrders(): Map<string, { key: string; period: string; ts: string }> 
   return GLOBAL.__arenaOrdersCache;
 }
 
-function loadEmailIndex(): Map<string, string> {
-  if (!GLOBAL.__arenaEmailCache) {
-    const map = new Map<string, string>();
-    const p = join(dataDir(), EMAIL_INDEX_FILE);
+function loadPending(): Map<string, PendingOrder> {
+  if (!GLOBAL.__arenaPendingCache) {
+    const map = new Map<string, PendingOrder>();
+    const p = join(dataDir(), PENDING_FILE);
     if (existsSync(p)) {
       try {
-        const raw = JSON.parse(readFileSync(p, "utf8")) as Record<string, string>;
+        const raw = JSON.parse(readFileSync(p, "utf8")) as Record<string, PendingOrder>;
         for (const [k, v] of Object.entries(raw)) {
-          if (v && typeof v === "string") map.set(k.toLowerCase(), v);
+          if (v && typeof v.key === "string" && typeof v.expiresAt === "string") map.set(k, v);
         }
       } catch {
         // 损坏时重建（下一笔写覆盖），不崩溃
       }
     }
-    GLOBAL.__arenaEmailCache = map;
+    GLOBAL.__arenaPendingCache = map;
   }
-  return GLOBAL.__arenaEmailCache;
+  return GLOBAL.__arenaPendingCache;
 }
 
-function persistEmailIndex(): void {
-  const map = loadEmailIndex();
-  const tmp = `${join(dataDir(), EMAIL_INDEX_FILE)}.tmp`;
+function persistPending(): void {
+  const map = loadPending();
+  const tmp = `${join(dataDir(), PENDING_FILE)}.tmp`;
   writeFileSync(tmp, JSON.stringify(Object.fromEntries(map), null, 0));
-  renameSync(tmp, join(dataDir(), EMAIL_INDEX_FILE)); // 原子替换
+  renameSync(tmp, join(dataDir(), PENDING_FILE)); // 原子替换
 }
 
-/** 记录登录邮箱 → userId（爱发电留言填邮箱对账用）。登录/升级时调用，失败不阻断主流程。 */
-export function linkUserEmail(email: string | null | undefined, userId: string): void {
-  if (!email) return;
-  const e = email.trim().toLowerCase();
-  if (!e || !userId) return;
-  const map = loadEmailIndex();
-  if (map.get(e) === userId) return;
-  map.set(e, userId);
-  try {
-    persistEmailIndex();
-  } catch {
-    // 索引写失败不致命：该邮箱订单会进入人工对账清单
-    console.error("[billing] email 索引写入失败：", e);
-  }
-}
-
-/** 按邮箱查 userId（爱发电 webhook 对账用）。不存在返回 null。 */
-export function findUserIdByEmail(email: string): string | null {
-  const e = email.trim().toLowerCase();
-  if (!e) return null;
-  return loadEmailIndex().get(e) ?? null;
-}
-
-function loadUnmatched(): Map<string, { outTradeNo: string; amount: string; remark: string; ts: string }> {
-  if (!GLOBAL.__arenaUnmatchedCache) {
-    const map = new Map<string, { outTradeNo: string; amount: string; remark: string; ts: string }>();
-    const p = join(dataDir(), UNMATCHED_FILE);
-    if (existsSync(p)) {
-      try {
-        const raw = JSON.parse(readFileSync(p, "utf8")) as Record<
-          string,
-          { outTradeNo: string; amount: string; remark: string; ts: string }
-        >;
-        for (const [k, v] of Object.entries(raw)) {
-          if (v && typeof v.outTradeNo === "string") map.set(k, v);
-        }
-      } catch {
-        // 损坏时重建（下一笔写覆盖），不崩溃
-      }
-    }
-    GLOBAL.__arenaUnmatchedCache = map;
-  }
-  return GLOBAL.__arenaUnmatchedCache;
-}
-
-function persistUnmatched(): void {
-  const map = loadUnmatched();
-  const tmp = `${join(dataDir(), UNMATCHED_FILE)}.tmp`;
-  writeFileSync(tmp, JSON.stringify(Object.fromEntries(map), null, 0));
-  renameSync(tmp, join(dataDir(), UNMATCHED_FILE));
-}
-
-/**
- * 记录无法自动对账的爱发电订单（留言缺失 / 邮箱未注册 / 找不到用户）。
- * 保留最近 200 条，管理员可据此在爱发电后台核对留言人工发放。
- */
-export function recordUnmatchedOrder(outTradeNo: string, amount: string, remark: string): void {
-  if (!outTradeNo) return;
-  const map = loadUnmatched();
-  map.set(outTradeNo, { outTradeNo, amount, remark, ts: new Date().toISOString() });
-  while (map.size > 200) {
+/** 记录待支付订单（upgrade 创建订单成功后调用）。存储不可写时抛 BillingStoreError（返回 503，不展示不可支付）。 */
+export function createPendingOrder(orderId: string, order: PendingOrder): void {
+  if (!orderId) return;
+  const map = loadPending();
+  map.set(orderId, order);
+  while (map.size > 500) {
     const first = map.keys().next().value;
     if (first === undefined) break;
     map.delete(first);
   }
   try {
-    persistUnmatched();
+    persistPending();
   } catch (e) {
-    map.delete(outTradeNo);
-    console.error("[billing] 待对账清单写入失败：", e);
+    map.delete(orderId);
+    throw new BillingStoreError(e);
+  }
+}
+
+/** 查找未过期的待支付订单（webhook 落账校验用）。过期即删，返回 null。 */
+export function findPendingOrder(orderId: string): PendingOrder | null {
+  if (!orderId) return null;
+  const map = loadPending();
+  const order = map.get(orderId);
+  if (!order) return null;
+  if (new Date(order.expiresAt).getTime() <= Date.now()) {
+    map.delete(orderId);
+    try {
+      persistPending();
+    } catch {
+      // 清理失败不致命：过期订单即使残留也会被下次读取判过期
+    }
+    return null;
+  }
+  return order;
+}
+
+/** 落账成功后移除待支付订单（幂等：不存在不报错）。 */
+export function removePendingOrder(orderId: string): void {
+  const map = loadPending();
+  if (!map.delete(orderId)) return;
+  try {
+    persistPending();
+  } catch {
+    // 删除失败不致命：残留订单不影响幂等（orders.json 已去重）
   }
 }
 
@@ -351,11 +332,17 @@ export function peekQuota(userId: string): QuotaResult {
   };
 }
 
+/** 查询订单是否已处理（幂等确认用：pending 已移除但订单已落账的重复回调应返回 200，而非拒绝）。 */
+export function isOrderProcessed(orderId: string): boolean {
+  if (!orderId) return false;
+  return loadOrders().has(orderId);
+}
+
 /** 设置计划（支付 webhook / 管理员发放共用）。expiresAt 仅 Pro 可设，到期自动降级。 */
 export function setPlan(
   userId: string,
   plan: Plan,
-  source: "paddle" | "afdian" | "grant",
+  source: "paddle" | "afdian" | "xorpay" | "grant",
   expiresAt: string | null = null
 ): Account {
   const map = loadAll();

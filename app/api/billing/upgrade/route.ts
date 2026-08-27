@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AUTH_ORIGIN, type SessionUser } from "@/lib/auth";
-import { accountKey, getAccount, linkUserEmail } from "@/lib/billing-store";
+import { accountKey, getAccount, createPendingOrder, BillingStoreError } from "@/lib/billing-store";
 import { PLANS } from "@/lib/billing";
-import { afdianConfig } from "@/lib/afdian";
+import { xorpayConfig, createXorPayPayment } from "@/lib/xorpay";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// 爱发电收单：爱发电无「开发者创建订单」API，买家在站内购买方案后由 webhook 落账。
-// 本接口只返回购买引导（方案链接 + 需填写的邮箱），不做真实下单。
+// XorPay 收单：创建真实支付订单（微信 native 扫码 / 支付宝 H5），返回二维码内容给前端渲染。
+// 订单号落 pending 表关联登录用户，webhook 回调凭订单号直接落账，无需留言对账。
 // 未配置凭据时返回 503（前端降级为「内测发放」入口，不展示假支付）。
 export async function POST(req: NextRequest) {
-  const cfg = afdianConfig();
+  const cfg = xorpayConfig();
   if (!cfg) {
     return NextResponse.json(
       {
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 支付必须挂到登录账号：留言按邮箱对账，匿名无法匹配
+  // 支付必须挂到登录账号：订单号落 pending 表关联 userId，匿名无法匹配
   const cookie = req.headers.get("cookie") ?? "";
   let user: SessionUser | null = null;
   if (cookie) {
@@ -50,9 +50,14 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ code: "INVALID_BODY", error: "请求体必须是 JSON" }, { status: 400 });
   }
-  const period = (body as Record<string, unknown>).period;
+  const record = body as Record<string, unknown>;
+  const period = record.period;
   if (period !== "monthly" && period !== "yearly") {
     return NextResponse.json({ code: "INVALID_BODY", error: "period 必须是 monthly / yearly" }, { status: 400 });
+  }
+  const method = record.method ?? "native";
+  if (method !== "native" && method !== "alipay") {
+    return NextResponse.json({ code: "INVALID_BODY", error: "method 必须是 native / alipay" }, { status: 400 });
   }
 
   const fwd = req.headers.get("x-forwarded-for");
@@ -60,21 +65,52 @@ export async function POST(req: NextRequest) {
   const key = accountKey(user, ip);
   getAccount(key);
 
-  // 预写邮箱 → userId 索引，保证买家留言邮箱时 webhook 能对账
-  linkUserEmail(user.email, user.id);
+  // 订单号：A + 时间戳 + 随机 4 位（XorPay order_id 唯一即可）
+  const orderNumber = `A${Date.now()}${Math.floor(1000 + Math.random() * 9000)}`;
+  const price = period === "yearly" ? String(PLANS.pro.priceYearly) : String(PLANS.pro.priceMonthly);
 
-  // 方案链接：优先配置的方案 ID，未配置则指向创作者主页（买家自行选方案）
-  const planId = period === "yearly" ? cfg.planYearly : cfg.planMonthly;
-  const url = planId ? `https://afdian.com/item/${planId}` : "https://afdian.com";
+  let created;
+  try {
+    created = await createXorPayPayment(cfg, {
+      name: `Arena Pro ${period === "yearly" ? "年付" : "月付"} ¥${price}`,
+      payType: method,
+      price,
+      orderNumber,
+      customerReference: user.id,
+    });
+  } catch (e) {
+    return NextResponse.json(
+      { code: "GATEWAY_ERROR", error: e instanceof Error ? e.message : "支付网关暂不可用" },
+      { status: 502 }
+    );
+  }
+
+  const expiresAt = new Date(Date.now() + created.expiresIn * 1000);
+  try {
+    // 落 pending 表：webhook 回调凭 orderNumber 查此记录（key/period/amount），失败则返回 503 不展示不可支付订单
+    createPendingOrder(orderNumber, {
+      key,
+      period,
+      amount: Number(price),
+      method,
+      createdAt: new Date().toISOString(),
+      expiresAt: expiresAt.toISOString(),
+    });
+  } catch (e) {
+    if (e instanceof BillingStoreError) {
+      return NextResponse.json({ code: "STORE_ERROR", error: "支付下单暂不可用，请稍后再试" }, { status: 503 });
+    }
+    throw e;
+  }
 
   return NextResponse.json({
-    provider: "afdian",
+    provider: "xorpay",
     plan: PLANS.pro.name,
     expiresInDays: period === "yearly" ? 365 : 30,
     period,
-    url,
-    planId,
-    email: user.email,
-    userId: user.id,
+    method,
+    paymentUrl: created.qr, // 二维码内容（微信扫码 / 支付宝 H5 链接）
+    orderNumber,
+    expiresAt: expiresAt.toISOString(),
   });
 }
