@@ -5,7 +5,8 @@
 // 未来可把策略执行这一步替换为真实 zmzai-sandbox 调用，数据契约不变。
 
 import { buildMarket, tradeCalendar, INSTRUMENT_MAP } from "@/sim/market";
-import { REAL_MARKET, REAL_MARKET_META, REAL_INDEXES } from "@/data/market-real";
+import { REAL_MARKET, REAL_MARKET_META } from "@/data/market-real";
+import { REAL_INDEXES } from "@/data/index-real";
 import { BENCH_INDEX, excessOf, windowReturn, MARKET_DAYS, type Excess } from "@/sim/index-market";
 import { STRATEGIES, type StrategyConfig } from "@/sim/strategies";
 import { runSimulation, type Tier as SimTier, type RawDecision } from "@/sim/engine";

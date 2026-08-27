@@ -1,5 +1,5 @@
 // 大盘指数工具：基准指数（沪深300）的趋势状态、窗口收益、超额收益。
-// 指数行情来自 src/data/market-real.ts 的 REAL_INDEXES（新浪日K，不复权点位），
+// 指数行情来自 src/data/index-real.ts 的 REAL_INDEXES（新浪日K，不复权点位），
 // 与个股行情同交易日历；引擎/UI 共用本模块，保证口径一致。
 
 import type { RealRow } from "./market";

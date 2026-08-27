@@ -19,3 +19,14 @@ export function gaussian(rng: () => number): number {
   while (v === 0) v = rng();
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
+
+// 字符串哈希（FNV-1a 32 位）：把标的 code 混入随机种子，
+// 使每个标的拥有独立于其他标的的随机流（标的池增减不影响既有序列）。
+export function hashStr(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}

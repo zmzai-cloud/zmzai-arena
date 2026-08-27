@@ -8,7 +8,7 @@
 import { INSTRUMENT_MAP } from "@/sim/market";
 import { runSimulation, type RawDecision, type Tier as SimTier } from "@/sim/engine";
 import { DEFAULT_CIRCUIT_BREAKER, type StrategyConfig, type StyleKey } from "@/sim/strategies";
-import { REAL_INDEXES } from "@/data/market-real";
+import { REAL_INDEXES } from "@/data/index-real";
 import { BENCH_INDEX, excessOf, windowReturn, MARKET_DAYS } from "@/sim/index-market";
 import { stressForConfig, type AgentStress, type SimSpec } from "@/sim/stress";
 import { attributeReturn, type Attribution } from "@/sim/attribution";

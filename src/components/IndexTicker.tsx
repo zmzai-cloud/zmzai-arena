@@ -1,10 +1,10 @@
 "use client";
 
 // 大盘指数行情面板：5 大指数真实日 K 行情条 + 点击展开交互走势图（原生 SVG，无图表库）。
-// 数据来自 src/data/market-real.ts（fetch-market.mjs 每日拉取），SSR 同步渲染，无网络请求。
+// 数据来自 src/data/index-real.ts（fetch-market.mjs 每日拉取），SSR 同步渲染，无网络请求。
 
 import { useMemo, useState } from "react";
-import { REAL_INDEXES, REAL_INDEX_NAMES } from "@/data/market-real";
+import { REAL_INDEXES, REAL_INDEX_NAMES } from "@/data/index-real";
 import { indexTrend, BENCH_INDEX_NAME } from "@/sim/index-market";
 import type { RealRow } from "@/sim/market";
 

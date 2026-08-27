@@ -3,8 +3,9 @@
 // 实盘标的池由拉取脚本按成交额排行榜动态扩展（当前 ~300 只），基础池仅定义
 // 美股/加密 + A 股锚点（自定义 drift/vol 优先，未在基础池的实盘标的自动并入）。
 
-import { makeRng, gaussian } from "./rng";
-import { REAL_MARKET, REAL_MARKET_NAMES, REAL_INDEXES } from "@/data/market-real";
+import { makeRng, gaussian, hashStr } from "./rng";
+import { REAL_MARKET_NAMES, REAL_LAST_CLOSE } from "@/data/market-real";
+import { REAL_INDEXES } from "@/data/index-real";
 
 export type MarketKind = "A股" | "港股" | "美股" | "加密" | "A股指数";
 
@@ -111,13 +112,14 @@ export const BASE_INSTRUMENTS: Instrument[] = [
 
 // 实盘标的自动并入：排行榜动态标的（REAL_MARKET_NAMES 驱动）不在基础池时补入，
 // 名称/起始价取自真实行情，默认 drift/vol 作为行情拉取失败时的 GBM 兜底。
+// 用轻量 REAL_LAST_CLOSE 而非全量 REAL_MARKET 取起点价：避免 ~8MB 明细
+// 被 esbuild 拉进沙箱回测 bundle（backtest-assemble 依赖本模块）。
 function mergeRealInstruments(): Instrument[] {
   const seen = new Set(BASE_INSTRUMENTS.map((i) => i.code));
   const extra: Instrument[] = [];
   for (const [code, name] of Object.entries(REAL_MARKET_NAMES)) {
     if (seen.has(code)) continue;
-    const bars = REAL_MARKET[code];
-    const lastClose = bars?.[bars.length - 1]?.[2];
+    const lastClose = REAL_LAST_CLOSE[code];
     extra.push({
       code,
       name,
@@ -164,26 +166,38 @@ export function boardOf(code: string): string {
 export const INSTRUMENT_OPTIONS = INSTRUMENTS.map((i) => ({ ...i, board: boardOf(i.code) }));
 
 // 生成 days 天的行情。seed 决定整段序列形态。
+// 随机流分配：基础池（BASE_INSTRUMENTS）沿用单一共享 rng 的顺序流——
+// 存量兼容承诺：官方 Agent 的美股/加密（AAPL/KO/BTC/ETH）序列与历史逐位一致；
+// 动态并入的实盘标的按 code 独立播种（seed ^ hashStr(code)）——排行榜扩充/淘汰
+// 不再消耗或错位任何其他标的的随机流，沙箱纯 GBM 回测在数据刷新后仍可复现。
 export function generateMarket(days: number, seed: number): PriceSeries {
-  const rng = makeRng(seed);
+  const shared = makeRng(seed);
+  // INSTRUMENTS = [...BASE_INSTRUMENTS, ...动态并入]，前 baseCount 个即基础池
+  const baseCount = BASE_INSTRUMENTS.length;
   const series: PriceSeries = {};
-  for (const inst of INSTRUMENTS) {
-    const bars: Bar[] = [];
-    let prev = inst.start;
-    for (let t = 0; t < days; t++) {
-      const z = gaussian(rng);
-      const dt = 1 / 252;
-      const ret = (inst.drift - 0.5 * inst.vol * inst.vol) * dt + inst.vol * Math.sqrt(dt) * z;
-      const close = Math.max(0.01, prev * Math.exp(ret));
-      const spread = inst.vol * Math.sqrt(dt) * (0.4 + rng() * 0.8);
-      const high = close * (1 + spread);
-      const low = close * (1 - spread);
-      bars.push({ t, close: r2(close), high: r2(high), low: r2(low) });
-      prev = close;
-    }
-    series[inst.code] = bars;
+  for (let i = 0; i < INSTRUMENTS.length; i++) {
+    const inst = INSTRUMENTS[i];
+    const rng = i < baseCount ? shared : makeRng(seed ^ hashStr(inst.code));
+    series[inst.code] = gbmBars(inst, days, rng);
   }
   return series;
+}
+
+function gbmBars(inst: Instrument, days: number, rng: () => number): Bar[] {
+  const bars: Bar[] = [];
+  let prev = inst.start;
+  for (let t = 0; t < days; t++) {
+    const z = gaussian(rng);
+    const dt = 1 / 252;
+    const ret = (inst.drift - 0.5 * inst.vol * inst.vol) * dt + inst.vol * Math.sqrt(dt) * z;
+    const close = Math.max(0.01, prev * Math.exp(ret));
+    const spread = inst.vol * Math.sqrt(dt) * (0.4 + rng() * 0.8);
+    const high = close * (1 + spread);
+    const low = close * (1 - spread);
+    bars.push({ t, close: r2(close), high: r2(high), low: r2(low) });
+    prev = close;
+  }
+  return bars;
 }
 
 // 混合行情：先用 GBM 生成全量序列，再把实盘标段替换为真实日 K（取最近 days 根，

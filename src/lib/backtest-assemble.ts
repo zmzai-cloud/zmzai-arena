@@ -6,7 +6,7 @@
 // 纯函数、无外部依赖，可被 esbuild 打包进沙箱单文件。
 
 import { generateMarket, type PriceSeries } from "../sim/market";
-import { REAL_INDEXES } from "../data/market-real";
+import { REAL_INDEXES } from "../data/index-real";
 import { runSimulation, type SimResult, type Tier } from "../sim/engine";
 import { MARKET_DAYS } from "../sim/index-market";
 import { attributeReturn, type Attribution } from "../sim/attribution";

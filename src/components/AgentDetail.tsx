@@ -10,7 +10,7 @@ import { computeIntegrityHash } from "@/lib/integrity";
 import { useIsFollowed, toggleFollow } from "@/lib/follows";
 import type { StressStatus } from "@/sim/stress";
 import type { RobustnessLabel } from "@/sim/robustness";
-import { REAL_INDEXES } from "@/data/market-real";
+import { REAL_INDEXES } from "@/data/index-real";
 import { BENCH_INDEX, BENCH_INDEX_NAME, MARKET_DAYS } from "@/sim/index-market";
 import { medalsOf, historyOf, loadSeasonSnapshots, MEDAL_LABEL, medalCls, leagueCls, LEAGUE_LABEL, leagueOf } from "@/lib/season";
 
