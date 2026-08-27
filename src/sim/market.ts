@@ -1,7 +1,10 @@
 // 行情引擎：A 股标的默认接入真实日 K（前复权，见 src/data/market-real.ts，由
 // scripts/fetch-market.mjs 拉取生成）；其余市场（美股/加密）保持种子化 GBM 模拟。
+// 实盘标的池由拉取脚本按成交额排行榜动态扩展（当前 ~300 只），基础池仅定义
+// 美股/加密 + A 股锚点（自定义 drift/vol 优先，未在基础池的实盘标的自动并入）。
 
 import { makeRng, gaussian } from "./rng";
+import { REAL_MARKET, REAL_MARKET_NAMES } from "@/data/market-real";
 
 export type MarketKind = "A股" | "港股" | "美股" | "加密";
 
@@ -29,8 +32,9 @@ export type PriceSeries = Record<string, Bar[]>; // code -> 每日 Bar
 // 实盘数据行：[date, open, close, high, low, volume]
 export type RealRow = [string, number, number, number, number, number];
 
-// 竞技场标的池（46 只 A 股真实行情 + 美股/加密模拟；start 为 GBM 兜底起点，行情拉取成功后被真实数据覆盖）
-export const INSTRUMENTS: Instrument[] = [
+// 基础标的池（覆盖 10 个智能体持仓/备选池 + 美股/加密模拟；start 为 GBM 兜底起点，
+// 行情拉取成功后被真实数据覆盖）
+export const BASE_INSTRUMENTS: Instrument[] = [
   // 白酒/消费
   { code: "600519", name: "贵州茅台", market: "A股", start: 1302.8, drift: 0.12, vol: 0.22 },
   { code: "000858", name: "五粮液", market: "A股", start: 71.9, drift: 0.08, vol: 0.28 },
@@ -98,9 +102,47 @@ export const INSTRUMENTS: Instrument[] = [
   { code: "ETH", name: "Ethereum", market: "加密", start: 3400, drift: 0.45, vol: 0.85 },
 ];
 
+// 实盘标的自动并入：排行榜动态标的（REAL_MARKET_NAMES 驱动）不在基础池时补入，
+// 名称/起始价取自真实行情，默认 drift/vol 作为行情拉取失败时的 GBM 兜底。
+function mergeRealInstruments(): Instrument[] {
+  const seen = new Set(BASE_INSTRUMENTS.map((i) => i.code));
+  const extra: Instrument[] = [];
+  for (const [code, name] of Object.entries(REAL_MARKET_NAMES)) {
+    if (seen.has(code)) continue;
+    const bars = REAL_MARKET[code];
+    const lastClose = bars?.[bars.length - 1]?.[2];
+    extra.push({
+      code,
+      name,
+      market: "A股",
+      start: typeof lastClose === "number" ? lastClose : 10,
+      drift: 0.08,
+      vol: 0.35,
+    });
+  }
+  return [...BASE_INSTRUMENTS, ...extra];
+}
+
+export const INSTRUMENTS: Instrument[] = mergeRealInstruments();
+
 export const INSTRUMENT_MAP: Record<string, Instrument> = Object.fromEntries(
   INSTRUMENTS.map((i) => [i.code, i])
 );
+
+// 板块分组（UI 用）：按代码前缀推导，与榜单数据保持一致
+const BOARD_RULES: Array<[string, RegExp]> = [
+  ["科创板", /^688/],
+  ["创业板", /^30/],
+  ["沪市主板", /^60/],
+  ["深市主板", /^000|^001|^002|^003/],
+  ["ETF", /^(51|58|15|16|56|159)/],
+];
+export function boardOf(code: string): string {
+  for (const [board, re] of BOARD_RULES) if (re.test(code)) return board;
+  return "其他";
+}
+
+export const INSTRUMENT_OPTIONS = INSTRUMENTS.map((i) => ({ ...i, board: boardOf(i.code) }));
 
 // 生成 days 天的行情。seed 决定整段序列形态。
 export function generateMarket(days: number, seed: number): PriceSeries {
@@ -137,9 +179,14 @@ export function buildMarket(
   if (real) {
     for (const [code, rows] of Object.entries(real)) {
       if (!INSTRUMENT_MAP[code]) continue; // 只接受标的池内的 code
-      series[code] = rows
-        .slice(-days)
-        .map((r, t) => ({ t, date: r[0], open: r[1], close: r[2], high: r[3], low: r[4], volume: r[5] }));
+      const sliced = rows.slice(-days);
+      const pad = days - sliced.length; // 次新股上市不足 days 天：前向填充为横盘，避免引擎越界
+      const first = sliced[0];
+      const bars = sliced.map((r, t) => ({ t: t + pad, date: r[0], open: r[1], close: r[2], high: r[3], low: r[4], volume: r[5] }));
+      for (let t = 0; t < pad; t++) {
+        bars.unshift({ t, date: first[0], open: first[1], close: first[2], high: first[3], low: first[4], volume: first[5] });
+      }
+      series[code] = bars;
     }
   }
   return series;

@@ -17,7 +17,7 @@ import { FREE_MAX_SIM_DAYS } from "@/lib/billing";
 import { getAgent } from "@/data/agents";
 import { getUserAgent } from "@/lib/userAgents";
 import { STRATEGIES, type StyleKey } from "@/sim/strategies";
-import { INSTRUMENT_MAP } from "@/sim/market";
+import { INSTRUMENT_MAP, boardOf } from "@/sim/market";
 
 const EMOJIS = ["🤖", "📈", "🐂", "🐻", "🧠", "⚡", "🎯", "🏆", "🧬", "🌟"];
 
@@ -35,6 +35,7 @@ export function CreateForm({ forkId }: { forkId?: string }) {
   const [rebalance, setRebalance] = useState(5);
   const [prompt, setPrompt] = useState("");
   const [slogan, setSlogan] = useState("");
+  const [query, setQuery] = useState("");
   const [creator, setCreator] = useState("我");
   const [error, setError] = useState("");
   const [quotaUpgrade, setQuotaUpgrade] = useState<string | null>(null);
@@ -86,14 +87,23 @@ export function CreateForm({ forkId }: { forkId?: string }) {
       .catch(() => {});
   }, []);
 
-  // 标的按市场分组
+  // 标的按板块分组（A 股按代码前缀分板块；美股/加密按市场），搜索时扁平展示过滤结果
   const grouped = useMemo(() => {
     const m: Record<string, typeof INSTRUMENT_OPTIONS> = {};
     for (const inst of INSTRUMENT_OPTIONS) {
-      (m[inst.market] ??= []).push(inst);
+      const key = inst.market !== "A股" ? inst.market : boardOf(inst.code);
+      (m[key] ??= []).push(inst);
     }
     return m;
   }, []);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return null;
+    return INSTRUMENT_OPTIONS.filter(
+      (i) => i.code.includes(q) || i.name.toLowerCase().includes(q)
+    ).slice(0, 60); // 搜索命中最多展示 60 只，避免超长列表
+  }, [query]);
 
   const toggleCode = (code: string) =>
     setUniverse((u) => (u.includes(code) ? u.filter((c) => c !== code) : [...u, code]));
@@ -219,28 +229,59 @@ export function CreateForm({ forkId }: { forkId?: string }) {
           </div>
 
           <div>
-            <label className={labelCls}>交易标的（可多选）*</label>
+            <label className={labelCls}>
+              交易标的（可多选）* <span className="font-normal text-ink-3">已选 {universe.length} 只</span>
+            </label>
+            <div className="mb-2">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="搜索代码/名称，如 600519 或 茅台"
+                className="h-9 w-full rounded-md border border-line bg-surface px-3 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:border-accent"
+              />
+            </div>
             <div className="max-h-52 overflow-y-auto rounded border border-line bg-surface-2 p-3">
-              {Object.entries(grouped).map(([mkt, list]) => (
-                <div key={mkt} className="mb-2 last:mb-0">
-                  <div className="mb-1 text-[11.5px] font-bold text-ink-2">{mkt}</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {list.map((inst) => (
-                      <button
-                        key={inst.code}
-                        onClick={() => toggleCode(inst.code)}
-                        className={`rounded-md border px-2 py-1 text-[12px] ${
-                          universe.includes(inst.code)
-                            ? "border-accent bg-accent/10 text-accent"
-                            : "border-line bg-surface text-ink-2"
-                        }`}
-                      >
-                        {inst.name}
-                      </button>
-                    ))}
-                  </div>
+              {filtered ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {filtered.length === 0 && <div className="text-[12px] text-ink-3">无匹配标的</div>}
+                  {filtered.map((inst) => (
+                    <button
+                      key={inst.code}
+                      onClick={() => toggleCode(inst.code)}
+                      className={`rounded-md border px-2 py-1 text-[12px] ${
+                        universe.includes(inst.code)
+                          ? "border-accent bg-accent/10 text-accent"
+                          : "border-line bg-surface text-ink-2"
+                      }`}
+                    >
+                      {inst.name}
+                    </button>
+                  ))}
                 </div>
-              ))}
+              ) : (
+                Object.entries(grouped).map(([mkt, list]) => (
+                  <div key={mkt} className="mb-2 last:mb-0">
+                    <div className="mb-1 text-[11.5px] font-bold text-ink-2">
+                      {mkt} <span className="font-normal text-ink-3">{list.length}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {list.map((inst) => (
+                        <button
+                          key={inst.code}
+                          onClick={() => toggleCode(inst.code)}
+                          className={`rounded-md border px-2 py-1 text-[12px] ${
+                            universe.includes(inst.code)
+                              ? "border-accent bg-accent/10 text-accent"
+                              : "border-line bg-surface text-ink-2"
+                          }`}
+                        >
+                          {inst.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
