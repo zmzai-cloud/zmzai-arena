@@ -143,6 +143,7 @@ interface BacktestParts {
   attribution: Attribution;
   robustness: RobustnessCert;
   stress: Record<string, AgentStress>;
+  nav: number[]; // 净值曲线（详情页与沪深300 叠加对比）
 }
 
 /**
@@ -191,6 +192,7 @@ function assembleAgent(input: CreateAgentInput, creator: string, id: number, sim
     ...(sandboxRunId ? { sandboxRunId } : {}),
     cfg, // 完整策略配置存档：详情页可一键重新验证
     simDays, // 引擎模拟天数（重验证基准周期）
+    nav: parts.nav, // 净值曲线（详情页与沪深300 叠加对比）
   };
   a.integrityHash = computeIntegrityHash(a);
   return a;
@@ -215,6 +217,7 @@ export function createUserAgent(input: CreateAgentInput, creator: string): Agent
     attribution: attributeReturn(res, market, cfg, simDays, "Paper", seed),
     robustness: certifyRobustness(market, cfg, simDays, "Paper", seed),
     stress,
+    nav: res.nav,
   }, "local");
 }
 
@@ -231,6 +234,7 @@ interface BacktestApiResponse {
     attribution: Attribution;
     robustness: RobustnessCert;
     stress: Record<string, AgentStress>;
+    nav: number[]; // 净值曲线（服务端/沙箱与本地同构）
   };
 }
 
@@ -305,6 +309,7 @@ export async function createUserAgentRemote(input: CreateAgentInput, creator: st
     attribution: data.result.attribution,
     robustness: data.result.robustness,
     stress: data.result.stress,
+    nav: data.result.nav,
   }, data.engine, data.runId ?? undefined);
 }
 
@@ -390,6 +395,7 @@ export async function reverifyAgentRemote(agent: Agent): Promise<Agent> {
       attribution: data.result.attribution,
       robustness: data.result.robustness,
       stress: data.result.stress,
+      nav: data.result.nav,
     },
     data.engine,
     data.runId ?? undefined,
@@ -415,6 +421,7 @@ function reverifyLocal(agent: Agent, id: number, simDays: number, seed: number):
       attribution: attributeReturn(res, market, cfg, simDays, "Paper", seed),
       robustness: certifyRobustness(market, cfg, simDays, "Paper", seed),
       stress,
+      nav: res.nav,
     },
     "local",
     undefined,

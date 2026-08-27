@@ -10,6 +10,8 @@ import { computeIntegrityHash } from "@/lib/integrity";
 import { useIsFollowed, toggleFollow } from "@/lib/follows";
 import type { StressStatus } from "@/sim/stress";
 import type { RobustnessLabel } from "@/sim/robustness";
+import { REAL_INDEXES } from "@/data/market-real";
+import { BENCH_INDEX, BENCH_INDEX_NAME } from "@/sim/index-market";
 import { medalsOf, historyOf, loadSeasonSnapshots, MEDAL_LABEL, medalCls, leagueCls, LEAGUE_LABEL, leagueOf } from "@/lib/season";
 
 // 验证档案页：受众是投资小白，核心动作是「验证一个 Agent 再决定要不要跟」
@@ -223,13 +225,35 @@ export function AgentDetail({ agent }: { agent: Agent }) {
       </div>
 
       {/* KPI：细线网格 + mono 数字 */}
-      <div className="mt-4 grid grid-cols-2 divide-x divide-y divide-line border border-line sm:grid-cols-5">
+      <div className="mt-4 grid grid-cols-2 divide-x divide-y divide-line border border-line sm:grid-cols-6">
         <Kpi v={fmtPct(agent.totalReturn)} l="总收益" cls={agent.totalReturn >= 0 ? "up" : "down"} />
         <Kpi v={fmtPct(agent.maxDD)} l="最大回撤" cls={agent.maxDD >= 0 ? "up" : "down"} />
         <Kpi v={agent.sharpe.toFixed(2)} l="夏普比率" />
         <Kpi v={String(agent.riskScore)} l="风险分 / 100" style={{ color: riskColor(agent.riskScore) }} />
+        <Kpi
+          v={agent.excess ? `${agent.excess.excess >= 0 ? "+" : ""}${(agent.excess.excess * 100).toFixed(1)}%` : "—"}
+          l={`超额收益 vs ${BENCH_INDEX_NAME}`}
+          cls={agent.excess ? (agent.excess.beat ? "up" : "down") : ""}
+        />
         <Kpi v={`#${rank}`} l="竞技场排名" />
       </div>
+
+      {/* 净值 vs 沪深300：同期归一化叠加曲线（原生 SVG） */}
+      {agent.nav && agent.nav.length > 1 && (
+        <div className="mt-4 border border-line bg-surface p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div className="text-[13px] font-bold">净值 vs {BENCH_INDEX_NAME}</div>
+            <div className="num text-[11px] text-ink-3">SAME WINDOW · NORMALIZED</div>
+          </div>
+          <NavVsBench nav={agent.nav} />
+          <p className="mt-2 text-[11.5px] leading-relaxed text-ink-3">
+            策略净值与{` ${BENCH_INDEX_NAME} `}同期归一化对比（同引擎窗口，起点=0）：曲线在上方即为跑赢大盘；
+            {agent.excess
+              ? `同期超额 ${agent.excess.excess >= 0 ? "+" : ""}${(agent.excess.excess * 100).toFixed(1)}%（${agent.excess.beat ? "跑赢" : "跑输"}基准）。`
+              : ""}
+          </p>
+        </div>
+      )}
 
       {/* 赛季轨迹：联赛升降级 + 徽章历史（留存钩子） */}
       {seasonHistory.length > 0 && (
@@ -713,6 +737,93 @@ function Mini({ label, value }: { label: string; value: string }) {
     <div className="border border-line bg-surface-2 px-3 py-2">
       <div className="text-[11px] text-ink-2">{label}</div>
       <div className="num mt-0.5 font-bold">{value}</div>
+    </div>
+  );
+}
+
+/** 净值 vs 沪深300 同期归一化叠加曲线（收益 %，起点 0） */
+function NavVsBench({ nav }: { nav: number[] }) {
+  const W = 760;
+  const H = 200;
+  const PAD = { l: 42, r: 10, t: 8, b: 20 };
+  const bench = REAL_INDEXES[BENCH_INDEX];
+  const n = Math.min(nav.length, bench?.length ?? nav.length);
+  const navRet = nav.slice(0, n).map((v) => (v / nav[0] - 1) * 100);
+  const benchRet = bench
+    ? bench.slice(-n).map((b) => (b[2] / bench[bench.length - n][2] - 1) * 100)
+    : [];
+  if (navRet.length < 2 || benchRet.length < 2) return null;
+  const all = [...navRet, ...benchRet, 0];
+  const min = Math.min(...all);
+  const max = Math.max(...all);
+  const span = max - min || 1;
+  const cw = W - PAD.l - PAD.r;
+  const ch = H - PAD.t - PAD.b;
+  const xOf = (i: number) => PAD.l + (i / (navRet.length - 1)) * cw;
+  const yOf = (v: number) => PAD.t + ch - ((v - min) / span) * ch;
+  const line = (vals: number[], stroke: string, dash?: string) => (
+    <path
+      d={vals.map((v, i) => `${i === 0 ? "M" : "L"}${xOf(i).toFixed(1)},${yOf(v).toFixed(1)}`).join(" ")}
+      fill="none"
+      stroke={stroke}
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+      strokeLinecap="round"
+      strokeDasharray={dash}
+    />
+  );
+  return (
+    <div className="mt-3">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="策略净值与沪深300对比曲线">
+        {/* 0 收益基线 + 网格 */}
+        <line x1={PAD.l} y1={yOf(0)} x2={W - PAD.r} y2={yOf(0)} stroke="var(--color-line)" strokeWidth="1" />
+        {[0.25, 0.75].map((f) => (
+          <line
+            key={f}
+            x1={PAD.l}
+            y1={PAD.t + ch * f}
+            x2={W - PAD.r}
+            y2={PAD.t + ch * f}
+            stroke="var(--color-line)"
+            strokeWidth="0.75"
+          />
+        ))}
+        {[0, 0.25, 0.5, 0.75, 1].map((f) => {
+          const v = min + span * (1 - f);
+          return (
+            <text
+              key={f}
+              x={PAD.l - 6}
+              y={PAD.t + ch * f + 3.5}
+              textAnchor="end"
+              fontSize="10"
+              fill="var(--color-ink-3)"
+              className="num"
+            >
+              {v >= 0 ? "+" : ""}
+              {v.toFixed(0)}%
+            </text>
+          );
+        })}
+        {line(benchRet, "var(--color-ink-3)", "5 4")}
+        {line(navRet, "var(--color-accent)")}
+        <text x={PAD.l} y={H - 6} fontSize="10" fill="var(--color-ink-3)" className="num">
+          起点
+        </text>
+        <text x={W - PAD.r} y={H - 6} textAnchor="end" fontSize="10" fill="var(--color-ink-3)" className="num">
+          第 {n} 日
+        </text>
+        <circle cx={xOf(navRet.length - 1)} cy={yOf(navRet[navRet.length - 1])} r="3" fill="var(--color-accent)" />
+        <circle cx={xOf(benchRet.length - 1)} cy={yOf(benchRet[benchRet.length - 1])} r="2.5" fill="var(--color-ink-3)" />
+      </svg>
+      <div className="mt-1 flex flex-wrap items-center gap-4 text-[11px] text-ink-3">
+        <span className="flex items-center gap-1.5">
+          <i className="h-0.5 w-4 bg-[var(--color-accent)]" /> 本策略净值
+        </span>
+        <span className="flex items-center gap-1.5">
+          <i className="h-0.5 w-4 border-t-2 border-dashed border-[var(--color-ink-3)]" /> {BENCH_INDEX_NAME}
+        </span>
+      </div>
     </div>
   );
 }

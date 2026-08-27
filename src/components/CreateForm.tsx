@@ -33,6 +33,7 @@ export function CreateForm({ forkId }: { forkId?: string }) {
   const [minCash, setMinCash] = useState(10);
   const [stopDD, setStopDD] = useState(8);
   const [rebalance, setRebalance] = useState(5);
+  const [circuitBreaker, setCircuitBreaker] = useState(true); // 大盘熔断护栏（默认开启）
   const [prompt, setPrompt] = useState("");
   const [slogan, setSlogan] = useState("");
   const [query, setQuery] = useState("");
@@ -87,11 +88,11 @@ export function CreateForm({ forkId }: { forkId?: string }) {
       .catch(() => {});
   }, []);
 
-  // 标的按板块分组（A 股按代码前缀分板块；美股/加密按市场），搜索时扁平展示过滤结果
+  // 标的按板块分组（A 股按代码前缀分板块；指数/美股/加密按市场），搜索时扁平展示过滤结果
   const grouped = useMemo(() => {
     const m: Record<string, typeof INSTRUMENT_OPTIONS> = {};
     for (const inst of INSTRUMENT_OPTIONS) {
-      const key = inst.market !== "A股" ? inst.market : boardOf(inst.code);
+      const key = inst.market !== "A股" && inst.market !== "A股指数" ? inst.market : boardOf(inst.code);
       (m[key] ??= []).push(inst);
     }
     return m;
@@ -125,6 +126,7 @@ export function CreateForm({ forkId }: { forkId?: string }) {
       rebalance,
       prompt,
       slogan,
+      circuitBreaker,
     };
     setSubmitting(true);
     setError("");
@@ -304,6 +306,22 @@ export function CreateForm({ forkId }: { forkId?: string }) {
             </div>
           </div>
 
+          <label className="flex cursor-pointer items-start gap-2.5 rounded border border-line bg-surface-2 px-3 py-2.5">
+            <input
+              type="checkbox"
+              checked={circuitBreaker}
+              onChange={(e) => setCircuitBreaker(e.target.checked)}
+              className="mt-0.5 accent-[var(--color-accent)]"
+            />
+            <span>
+              <span className="block text-[13px] font-semibold">大盘熔断护栏（默认开启）</span>
+              <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-3">
+                基准沪深300 跌破 20 日线 -3% 时强制总仓位 ≤ 30%，跌破 60 日线时 ≤ 10%；站回均线后自动解除。
+                决策日志全程可见触发 / 解除 / 降仓记录。
+              </span>
+            </span>
+          </label>
+
           <div>
             <label className={labelCls}>策略逻辑 Prompt *</label>
             <textarea
@@ -352,8 +370,8 @@ export function CreateForm({ forkId }: { forkId?: string }) {
             </div>
           </div>
           <div className="mt-4 bg-surface-2 p-3 text-[12.5px] leading-relaxed text-ink-2">
-            <div><b>风控护栏：</b>单笔 ≤ {maxSingle}% NAV；强制 ≥ {minCash}% 现金；回撤 &gt; {stopDD}% 自动减仓。</div>
-            <div className="mt-2"><b>调仓：</b>每 {rebalance} 天；标的池 {universe.length} 只。</div>
+            <div><b>风控护栏：</b>单笔 ≤ {maxSingle}% NAV；强制 ≥ {minCash}% 现金；回撤 &gt; {stopDD}% 自动减仓。{circuitBreaker ? "大盘熔断：跌破20日线 -3% 强制降仓至 30%，跌破60日线降至 10%。" : ""}</div>
+            <div className="mt-2"><b>调仓：</b>每 {rebalance} 天；标的池 {universe.length} 只{circuitBreaker ? "（含大盘熔断风控）" : ""}。</div>
             <div className="mt-2 text-ink-3">提交后将提交至 zmzai-sandbox 隔离沙箱做真实回测（含撮合成本），并叠加黑天鹅压力测试。</div>
           </div>
           <p className="mt-4 text-[11.5px] text-ink-2">模拟撮合 · A股真实日K（前复权）+ 美股/加密模拟 · 不构成投资建议</p>

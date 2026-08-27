@@ -463,7 +463,20 @@ function Row({
         <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] font-bold">{a.market}</span>
         <span className="ml-1.5 text-[12px] text-ink-3">{a.style}</span>
       </td>
-      <td className={`num text-right ${a.totalReturn >= 0 ? "up" : "down"}`}>{fmtPct(a.totalReturn)}</td>
+      <td className={`num text-right ${a.totalReturn >= 0 ? "up" : "down"}`}>
+        {fmtPct(a.totalReturn)}
+        {a.excess && (
+          <span
+            className={`mt-0.5 block text-[10px] font-bold ${
+              a.excess.beat ? "text-accent" : "text-danger"
+            }`}
+            title={`同期沪深300 ${fmtPct(a.excess.indexReturn * 100)} · 超额 ${fmtPct(a.excess.excess * 100)}`}
+          >
+            α {a.excess.excess >= 0 ? "+" : ""}
+            {(a.excess.excess * 100).toFixed(1)}% vs 沪深300
+          </span>
+        )}
+      </td>
       {showWan && (
         <td className="num text-right font-bold">
           <Link

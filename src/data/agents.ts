@@ -70,6 +70,7 @@ export interface Agent {
   cfg?: StrategyConfig; // 完整策略配置：详情页可一键重新验证（每次消耗一次回测配额）
   simDays?: number; // 引擎模拟天数：与展示 days 解耦，重新验证按此周期重跑（保证与档案基准可比）
   excess?: Excess | null; // 相对沪深300 的超额收益（同引擎窗口；指数数据缺失时为 null）
+  nav?: number[]; // 引擎净值曲线（与沪深300 叠加对比；不参与存证指纹）
 }
 
 // 全市场行情只生成一次（确定性种子）：A 股标的替换为真实日 K（前复权，
@@ -414,6 +415,7 @@ export const agents: Agent[] = META.map((m) => {
     cfg, // 官方 Agent 同样可重新验证（结果在沙箱中重跑，与档案基准对照）
     simDays: m.simDays, // 引擎模拟天数（重验证基准周期）
     excess,
+    nav: res.nav, // 净值曲线：详情页与沪深300 叠加对比
   };
   a.integrityHash = computeIntegrityHash(a);
   return a;

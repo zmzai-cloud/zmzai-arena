@@ -1,4 +1,5 @@
 import { ArenaStats } from "@/components/ArenaStats";
+import { IndexTicker } from "@/components/IndexTicker";
 import { Leaderboard } from "@/components/Leaderboard";
 import { StressTest } from "@/components/StressTest";
 
@@ -16,6 +17,7 @@ export default function ArenaPage() {
         </div>
         <p className="num text-[11px] tracking-[0.1em] text-ink-3">ZMIZ · ARENA / RANKED BY RISK-ADJUSTED RETURN</p>
       </div>
+      <IndexTicker />
       <ArenaStats />
       <Leaderboard />
       <StressTest />
