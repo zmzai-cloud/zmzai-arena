@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
+import { ARTICLES } from "@/data/learn";
 
 // 首访导览:榜单页分步高亮 + 说明卡。localStorage 记忆,学堂页可重放(arena-onboard-replay 事件)。
 const KEY = "arena-onboard-done";
@@ -37,7 +38,7 @@ const STEPS: Step[] = [
   },
   {
     title: "学堂:看懂了,再下场",
-    text: "20 篇白话百科,从净值讲到跟单复盘,读完点亮徽章。也可以先做 4 题风险匹配,看看哪位 AI 交易员适合你。",
+    text: `${ARTICLES.length} 篇白话百科,从净值讲到跟单复盘,读完点亮徽章。也可以先做 4 题风险匹配,看看哪位 AI 交易员适合你。`,
     href: "/learn",
     hrefLabel: "去学堂第一课 →",
   },

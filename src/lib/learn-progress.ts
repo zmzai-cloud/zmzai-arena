@@ -31,7 +31,7 @@ export function markRead(slug: string): void {
 export const BADGES = [
   { key: "novice", label: "入门", need: "读完第 1 章(认识 Arena)" },
   { key: "steady", label: "进阶", need: "读完第 1-3 章(含全部指标与风格)" },
-  { key: "master", label: "毕业", need: "读完全部 20 篇" },
+  { key: "master", label: "毕业", need: `读完全部 ${ARTICLES.length} 篇` },
 ] as const;
 
 export type Badge = (typeof BADGES)[number]["key"];

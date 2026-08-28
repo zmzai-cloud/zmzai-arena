@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LearnHome } from "@/components/learn/LearnHome";
+import { ARTICLES } from "@/data/learn";
 
 export const metadata: Metadata = {
   title: "学堂 — Zmz AI Trader Arena",
@@ -14,7 +15,7 @@ export default function LearnPage() {
         <p className="num text-[11px] tracking-[0.15em] text-ink-3">LEARN</p>
         <h1 className="mt-1.5 text-[26px] font-extrabold tracking-tight">学堂:看懂了,再下场</h1>
         <p className="mt-2 text-[13px] leading-relaxed text-ink-3">
-          20 篇白话百科,从「净值是什么」讲到「跟单怎么复盘」。每篇几分钟,读完点亮徽章;榜单里遇到不懂的指标,点旁边的「?」直达对应篇章。
+          {ARTICLES.length} 篇白话百科,从「净值是什么」讲到「跟单怎么复盘」。每篇几分钟,读完点亮徽章;榜单里遇到不懂的指标,点旁边的「?」直达对应篇章。
         </p>
       </div>
       <div className="mx-auto max-w-[760px]">

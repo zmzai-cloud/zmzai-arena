@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { articleBySlug, chapterOf, glossaryTerm, neighborsOf } from "@/data/learn";
+import { ARTICLES, articleBySlug, chapterOf, glossaryTerm, neighborsOf } from "@/data/learn";
 import { markRead, getReadSlugs } from "@/lib/learn-progress";
 import { LearnBlocks } from "./LearnBlocks";
 
@@ -34,7 +34,7 @@ export function ArticleView({ slug }: { slug: string }) {
       <h1 className="text-[24px] font-extrabold leading-snug tracking-tight text-ink">{article.title}</h1>
       <p className="mt-2 text-[14px] text-ink-2">{article.subtitle}</p>
       <div className="mt-2 text-[12px] text-ink-3">
-        约 {article.minutes} 分钟 · 全站第 {readCount} / 20 篇已读
+        约 {article.minutes} 分钟 · 全站第 {readCount} / {ARTICLES.length} 篇已读
       </div>
 
       <div className="mt-6">
