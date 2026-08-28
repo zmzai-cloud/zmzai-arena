@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Navbar, navItemClass } from "@zmzai/theme/components/navbar";
+import { Logo, Wordmark } from "@zmzai/theme/brand";
 import { AUTH_ORIGIN, loginUrl, type SessionUser } from "@/lib/auth";
 
 // 全域统一顶栏：Logo + Wordmark（ZMZAI · trader-arena），与其他 7 站同源
@@ -43,9 +44,18 @@ export function Nav() {
 
   return (
     <Navbar
-      sublabel="trader-arena"
-      badge={<span className="num text-[11px] tracking-wide text-ink-3">arena.zmzai.cloud</span>}
       brandHref="/"
+      // 品牌区自组:Logo 垂直居中,ZMZAI·trader-arena 与域名放同一 items-baseline 基线流,
+      // 消除 mono 行盒上浮导致的三段文字基线不齐(Wordmark 与 badge 分置两套对齐体系所致)
+      brand={
+        <span className="inline-flex items-center gap-2">
+          <Logo size={22} />
+          <span className="inline-flex items-baseline gap-2.5">
+            <Wordmark size={16} sublabel="trader-arena" />
+            <span className="num text-[11px] tracking-wide text-ink-3">arena.zmzai.cloud</span>
+          </span>
+        </span>
+      }
       actions={
         <>
           {user ? (
