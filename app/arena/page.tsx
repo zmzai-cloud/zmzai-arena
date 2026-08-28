@@ -2,6 +2,7 @@ import { ArenaStats } from "@/components/ArenaStats";
 import { IndexTicker } from "@/components/IndexTicker";
 import { Leaderboard } from "@/components/Leaderboard";
 import { StressTest } from "@/components/StressTest";
+import { OnboardingTour } from "@/components/OnboardingTour";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +19,12 @@ export default function ArenaPage() {
         <p className="num text-[11px] tracking-[0.1em] text-ink-3">ZMIZ · ARENA / RANKED BY RISK-ADJUSTED RETURN</p>
       </div>
       <IndexTicker />
-      <ArenaStats />
+      <div id="tour-arena-stats">
+        <ArenaStats />
+      </div>
       <Leaderboard />
       <StressTest />
+      <OnboardingTour />
     </section>
   );
 }

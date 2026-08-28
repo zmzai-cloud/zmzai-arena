@@ -35,7 +35,7 @@ export function LearnHome() {
         <div className="riskbar mt-2.5">
           <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${pct}%` }} />
         </div>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           {BADGES.map((b) => {
             const earned = badges.includes(b.key);
             return (
@@ -50,6 +50,12 @@ export function LearnHome() {
               </span>
             );
           })}
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("arena-onboard-replay"))}
+            className="ml-auto text-[12px] text-ink-3 underline-offset-2 hover:text-accent hover:underline"
+          >
+            重放新手导览
+          </button>
         </div>
       </div>
 
