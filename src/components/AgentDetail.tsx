@@ -8,6 +8,7 @@ import { loadUserAgents, saveUserAgent, reverifyAgentRemote, BacktestQuotaError 
 import { fmtPct, riskColor, tierBadge, tierDesc, engineBadge, engineCls } from "@/lib/format";
 import { computeIntegrityHash } from "@/lib/integrity";
 import { useIsFollowed, toggleFollow } from "@/lib/follows";
+import { TermHint } from "@/components/TermHint";
 import type { StressStatus } from "@/sim/stress";
 import type { RobustnessLabel } from "@/sim/robustness";
 import { REAL_INDEXES } from "@/data/index-real";
@@ -226,13 +227,14 @@ export function AgentDetail({ agent }: { agent: Agent }) {
 
       {/* KPI：细线网格 + mono 数字 */}
       <div className="mt-4 grid grid-cols-2 divide-x divide-y divide-line border border-line sm:grid-cols-6">
-        <Kpi v={fmtPct(agent.totalReturn)} l="总收益" cls={agent.totalReturn >= 0 ? "up" : "down"} />
-        <Kpi v={fmtPct(agent.maxDD)} l="最大回撤" cls={agent.maxDD >= 0 ? "up" : "down"} />
-        <Kpi v={agent.sharpe.toFixed(2)} l="夏普比率" />
-        <Kpi v={String(agent.riskScore)} l="风险分 / 100" style={{ color: riskColor(agent.riskScore) }} />
+        <Kpi v={fmtPct(agent.totalReturn)} l="总收益" hint="totalReturn" cls={agent.totalReturn >= 0 ? "up" : "down"} />
+        <Kpi v={fmtPct(agent.maxDD)} l="最大回撤" hint="maxDD" cls={agent.maxDD >= 0 ? "up" : "down"} />
+        <Kpi v={agent.sharpe.toFixed(2)} l="夏普比率" hint="sharpe" />
+        <Kpi v={String(agent.riskScore)} l="风险分 / 100" hint="riskScore" style={{ color: riskColor(agent.riskScore) }} />
         <Kpi
           v={agent.excess ? `${agent.excess.excess >= 0 ? "+" : ""}${(agent.excess.excess * 100).toFixed(1)}%` : "—"}
           l={`超额收益 vs ${BENCH_INDEX_NAME}`}
+          hint="excess"
           cls={agent.excess ? (agent.excess.beat ? "up" : "down") : ""}
         />
         <Kpi v={`#${rank}`} l="竞技场排名" />
@@ -673,18 +675,23 @@ function Kpi({
   l,
   cls,
   style,
+  hint,
 }: {
   v: string;
   l: string;
   cls?: string;
   style?: CSSProperties;
+  hint?: string;
 }) {
   return (
     <div className="bg-surface px-4 py-3.5">
       <div className={`num text-[20px] font-extrabold ${cls ?? ""}`} style={style}>
         {v}
       </div>
-      <div className="mt-0.5 text-[12px] text-ink-2">{l}</div>
+      <div className="mt-0.5 flex items-center gap-1 text-[12px] text-ink-2">
+        {l}
+        {hint && <TermHint termKey={hint} />}
+      </div>
     </div>
   );
 }

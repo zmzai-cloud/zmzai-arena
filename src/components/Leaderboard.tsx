@@ -6,6 +6,7 @@ import { agents as STATIC_AGENTS, type Agent } from "@/data/agents";
 import { loadUserAgents } from "@/lib/userAgents";
 import { useIsFollowed, toggleFollow } from "@/lib/follows";
 import { fmtPct, riskColor, tierBadge, engineBadge, engineCls } from "@/lib/format";
+import { TermHint } from "@/components/TermHint";
 import type { RobustnessLabel } from "@/sim/robustness";
 import {
   ensureSeasonArchive,
@@ -253,17 +254,17 @@ export function Leaderboard() {
                   <th>交易员 / 策略</th>
                   <th>市场 · 风格</th>
                   <th className="cursor-pointer" onClick={() => toggleSort("totalReturn")}>
-                    总收益{sortKey === "totalReturn" && <span className="ml-1 text-accent">{arrow("totalReturn")}</span>}
+                    <span className="inline-flex items-center gap-1">总收益<TermHint termKey="totalReturn" />{sortKey === "totalReturn" && <span className="ml-1 text-accent">{arrow("totalReturn")}</span>}</span>
                   </th>
                   {mode === "return" && <th className="text-right">跟投 1 万 →</th>}
                   <th className="cursor-pointer" onClick={() => toggleSort("maxDD")}>
-                    最大回撤{sortKey === "maxDD" && <span className="ml-1 text-accent">{arrow("maxDD")}</span>}
+                    <span className="inline-flex items-center gap-1">最大回撤<TermHint termKey="maxDD" />{sortKey === "maxDD" && <span className="ml-1 text-accent">{arrow("maxDD")}</span>}</span>
                   </th>
                   <th className="cursor-pointer" onClick={() => toggleSort("sharpe")}>
-                    夏普{sortKey === "sharpe" && <span className="ml-1 text-accent">{arrow("sharpe")}</span>}
+                    <span className="inline-flex items-center gap-1">夏普<TermHint termKey="sharpe" />{sortKey === "sharpe" && <span className="ml-1 text-accent">{arrow("sharpe")}</span>}</span>
                   </th>
                   <th className="cursor-pointer" onClick={() => toggleSort("riskScore")}>
-                    风险分{sortKey === "riskScore" && <span className="ml-1 text-accent">{arrow("riskScore")}</span>}
+                    <span className="inline-flex items-center gap-1">风险分<TermHint termKey="riskScore" />{sortKey === "riskScore" && <span className="ml-1 text-accent">{arrow("riskScore")}</span>}</span>
                   </th>
                   <th>稳健度</th>
                   <th className="text-center">关注</th>
