@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
 import { assembleBacktestResult, type BacktestInput, type BacktestResult } from "./backtest-assemble";
+import type { PriceSeries } from "../sim/market";
 
 const sandboxUrl = () => (process.env.SANDBOX_URL?.trim() || "https://z.zmzai.cloud").replace(/\/$/, "");
 const sandboxSecret = () => process.env.SANDBOX_AGENT_SERVICE_SECRET?.trim() ?? "";
@@ -120,11 +121,31 @@ export interface BacktestOutcome {
   note?: string;
 }
 
+export interface RunBacktestOptions {
+  /**
+   * 实盘行情快照（dataSource=real）。传入时强制本地引擎执行：
+   * 快照由 arena 服务端向 zmzai-data 拉取，沙箱内既无网络也无 service-key。
+   */
+  market?: PriceSeries;
+}
+
 /**
  * 执行一次完整回测：优先沙箱，失败自动降级本地。
  * userId 用于沙箱并发配额归属（SSO 用户 id；未登录用 arena-public）。
  */
-export async function runBacktest(input: BacktestInput, userId: string): Promise<BacktestOutcome> {
+export async function runBacktest(
+  input: BacktestInput,
+  userId: string,
+  opts: RunBacktestOptions = {},
+): Promise<BacktestOutcome> {
+  // 实盘行情快照：本地引擎执行（沙箱拿不到快照，也不该让它去调行情服务）
+  if (opts.market) {
+    return {
+      engine: "local",
+      result: assembleBacktestResult({ ...input, market: opts.market }),
+      note: "实盘回测：zmzai-data 真实行情快照 + arena 本地引擎执行",
+    };
+  }
   // 未配置服务密钥（本地调试 / 环境未同步）时直接走本地引擎
   if (!sandboxSecret()) {
     return { engine: "local", result: assembleBacktestResult(input), note: "sandbox 未配置" };

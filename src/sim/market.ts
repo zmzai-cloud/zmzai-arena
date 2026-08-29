@@ -235,6 +235,104 @@ export function tradeCalendar(series: PriceSeries): string[] {
   return [...set].sort();
 }
 
+// ---------- 实盘行情快照（real 数据源） ----------
+
+// 外部行情服务（zmzai-data）返回的单根日线。字段与 zmzai-data 的 Bar 契约一致。
+export interface RealBar {
+  date: string; // yyyy-mm-dd
+  open?: number;
+  close: number;
+  high?: number;
+  low?: number;
+  volume?: number;
+}
+
+/** 取数器：给定标的与需要的根数，返回升序日线。由调用方注入（服务端 = zmzai-data 客户端）。 */
+export type RealBarsFetcher = (code: string, days: number) => Promise<RealBar[]>;
+
+/**
+ * 从外部行情服务加载真实日线 → 归一化为引擎同款 Bars 快照（冻结）。
+ *
+ * 快照语义：一次回测只用这一份快照，因此同一组入参多次运行结果完全一致；
+ * 反前瞻逻辑（closesUntil）照常生效，策略仍然只能看到 ≤ 当前 day 的价格。
+ *
+ * 日历对齐：A股与加密的交易日历不同（加密周末也开盘），因此取所有标的日期的
+ * **并集**作为统一时间轴，缺失的日期按「前向填充」补齐（停牌/非交易日沿用上一根），
+ * 与 buildMarket 里次新股前填充的语义一致，避免引擎越界。
+ *
+ * 冻结：返回的 PriceSeries 与各 Bar 数组均 Object.freeze，防止下游意外改写快照。
+ */
+export async function loadRealMarket(
+  provider: RealBarsFetcher,
+  symbols: string[],
+  days: number,
+): Promise<PriceSeries> {
+  if (!Array.isArray(symbols) || symbols.length === 0) {
+    throw new Error("实盘回测需要至少 1 个标的");
+  }
+  if (!Number.isFinite(days) || days < 2) {
+    throw new Error("实盘回测周期必须 ≥ 2 个交易日");
+  }
+
+  const fetched = await Promise.all(
+    symbols.map(async (code) => ({ code, bars: await provider(code, days) })),
+  );
+
+  const missing = fetched.filter((f) => f.bars.length === 0).map((f) => f.code);
+  if (missing.length > 0) {
+    throw new Error(`以下标的没有取到真实日线：${missing.join("、")}`);
+  }
+
+  // 并集交易日历（升序）→ 截取最近 days 天作为快照窗口
+  const dates = [...new Set(fetched.flatMap((f) => f.bars.map((b) => b.date)))].sort();
+  const window = dates.slice(-days);
+
+  const series: PriceSeries = {};
+  for (const { code, bars } of fetched) {
+    const ordered = [...bars].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    const out: Bar[] = [];
+    let i = 0;
+    let carried: RealBar | null = null;
+    for (const day of window) {
+      while (i < ordered.length && ordered[i].date <= day) {
+        carried = ordered[i];
+        i += 1;
+      }
+      // 窗口起点早于该标的的数据起点（carried 为空，如次新股）→ 用最早一根填充
+      const src = carried ?? ordered[0];
+      const close = src.close;
+      out.push({
+        t: out.length,
+        date: day,
+        open: src.open ?? close,
+        close,
+        high: src.high ?? close,
+        low: src.low ?? close,
+        volume: src.volume,
+      });
+    }
+    // Object.freeze 的返回值是 readonly 类型，这里就地冻结、不接返回值，
+    // 保持对外类型仍是 PriceSeries（下游引擎只读，不写）
+    series[code] = out;
+    Object.freeze(out);
+  }
+  Object.freeze(series);
+  return series;
+}
+
+/** 快照覆盖的自然日区间（无日期时返回 null） */
+export function snapshotRange(series: PriceSeries): { from: string; to: string } | null {
+  let from: string | null = null;
+  let to: string | null = null;
+  for (const bars of Object.values(series)) {
+    const first = bars[0]?.date;
+    const last = bars[bars.length - 1]?.date;
+    if (first && (!from || first < from)) from = first;
+    if (last && (!to || last > to)) to = last;
+  }
+  return from && to ? { from, to } : null;
+}
+
 // 取某标的截至 day（含）的收盘价序列——反前瞻：永远拿不到未来价格
 export function closesUntil(series: PriceSeries, code: string, day: number): number[] {
   const bars = series[code] ?? [];

@@ -93,6 +93,9 @@ export function Nav() {
       <Link href="/signals" className={navItemClass(pathname.startsWith("/signals"))}>
         信号
       </Link>
+      <Link href="/backtest" className={navItemClass(pathname.startsWith("/backtest"))}>
+        回测
+      </Link>
       <Link href="/create" className={navItemClass(pathname.startsWith("/create"))}>
         创建
       </Link>

@@ -26,6 +26,11 @@ export interface BacktestInput {
   tier: Tier;
   marketDays?: number;
   marketSeed?: number;
+  /**
+   * 实盘行情快照（dataSource=real，由 loadRealMarket 冻结产出）。
+   * 缺省 = 走 generateMarket 生成种子化行情——**行为与引入 real 模式前逐字节一致**。
+   */
+  market?: PriceSeries;
 }
 
 export interface BacktestResult {
@@ -40,9 +45,19 @@ export interface BacktestResult {
 }
 
 export function assembleBacktestResult(input: BacktestInput): BacktestResult {
-  const market = generateMarket(input.marketDays ?? MARKET_DAYS, input.marketSeed ?? GLOBAL_SEED);
-  // 第 6 参 indexMarket：注入真实指数行情，大盘状态事件 + 熔断护栏仅在 cfg.circuitBreaker 启用时生效
-  const res = runSimulation(input.cfg, market, input.simDays, input.seed, input.tier, REAL_INDEXES);
+  // real 模式：用外部加载并冻结的真实行情快照；sim 模式：种子化生成（与改动前完全一致）
+  const realSnapshot = Boolean(input.market);
+  const market = input.market ?? generateMarket(input.marketDays ?? MARKET_DAYS, input.marketSeed ?? GLOBAL_SEED);
+  // 第 6 参 indexMarket：注入真实指数行情，大盘状态事件 + 熔断护栏仅在 cfg.circuitBreaker 启用时生效。
+  // real 模式不注入——指数窗口与真实行情快照时间轴不同源，强行对齐会产生误导性信号。
+  const res = runSimulation(
+    input.cfg,
+    market,
+    input.simDays,
+    input.seed,
+    input.tier,
+    realSnapshot ? undefined : REAL_INDEXES,
+  );
   const spec: SimSpec = { id: input.cfg.id, tier: input.tier, simDays: input.simDays, seed: input.seed };
   return {
     engine: "local",

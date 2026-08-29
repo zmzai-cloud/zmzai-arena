@@ -59,6 +59,32 @@ pnpm build    # 生产构建
 
 > 需要环境变量：`SANDBOX_URL=https://z.zmzai.cloud`、`SANDBOX_AGENT_SERVICE_SECRET=<与 sandbox 生产一致的服务密钥>`。未配置时回测自动降级本地引擎，功能不受影响。
 
+## 实盘回测（dataSource=real · zmzai-data）
+
+除默认的**仿真回测**（`dataSource=sim`，本地种子化行情，可复现）外，`POST /api/backtest` 与 `/backtest` 工作台支持**实盘回测**：
+
+1. 前端选「实盘行情」+ 标的（A股 6 位代码走 Tushare，BTC / ETH 走 Binance USDT 现货，可混选）；
+2. arena 服务端向 **zmzai-data**（`DATA_ORIGIN`，默认 `http://127.0.0.1:3004`）拉日线，
+   `loadRealMarket()` 把多标的按**并集日历**对齐、缺失日期前向填充，冻结成一份行情快照；
+3. 用同一套引擎跑这份快照（`assembleBacktestResult`），含手续费 / 滑点 / 涨跌停约束；
+4. 反前瞻（`closesUntil`）照常生效；快照根数不足时自动裁剪回测周期并在 `note` 中说明。
+
+约定与边界：
+
+- **快照语义**：一次回测一份快照，同一组参数多次运行结果完全一致。
+- **实盘快照只在 arena 服务端可用**（沙箱内无网络、无 service-key）→ 强制本地引擎执行。
+- **计入同一份 Free / Pro 回测配额**；行情取不到时不扣额度（先取数、后扣费）。
+- **v1 只支持官方智能体**：用户智能体存在浏览器 localStorage，服务端无法还原完整契约。
+- **反过拟合认证 / 黑天鹅压测**在实盘模式下对照行情仍是随机生成的，UI 明确标注「基于真实行情快照」。
+
+### 环境变量
+
+```bash
+# zmzai-data 行情服务（实盘回测数据源）；未配置时实盘回测不可用，仿真回测完全不受影响
+DATA_ORIGIN=http://127.0.0.1:3004
+DATA_SERVICE_KEY=<与 zmzai-data 的 DATA_SERVICE_KEY_CURRENT 一致>
+```
+
 ## 商业化与计费（Free / Pro）
 
 产品按订阅制收费：**Free**（¥0）与 **Pro**（¥29/月 · ¥198/年）。回测（沙箱算力）是核心计费资源：

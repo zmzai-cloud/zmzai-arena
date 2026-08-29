@@ -66,6 +66,39 @@ export function sanitizeSimDays(v: unknown): number {
   return typeof v === "number" && v >= 10 && v <= 500 ? Math.round(v) : 120;
 }
 
+// ---------- 数据源（sim = 本地种子化仿真；real = zmzai-data 真实行情快照） ----------
+
+export type DataSource = "sim" | "real";
+
+/** 实盘回测单个组合最多选多少标的（限制上游取数次数与引擎算力） */
+export const MAX_REAL_SYMBOLS = 8;
+
+/** 未传 / 非法值一律回落 sim——保证既有调用方行为不变 */
+export function sanitizeDataSource(v: unknown): DataSource {
+  return v === "real" ? "real" : "sim";
+}
+
+export type SanitizeSymbolsResult = { ok: true; symbols: string[] } | { ok: false; error: string };
+
+/** 实盘回测的标的多选：必须是标的池内的 code，去重且限量 */
+export function sanitizeSymbols(v: unknown): SanitizeSymbolsResult {
+  if (!Array.isArray(v) || v.length === 0) {
+    return { ok: false, error: "实盘回测必须选择至少 1 个标的" };
+  }
+  const out: string[] = [];
+  for (const raw of v) {
+    if (typeof raw !== "string") continue;
+    const code = raw.trim();
+    if (!INSTRUMENT_MAP[code]) return { ok: false, error: `未知标的：${code}` };
+    if (!out.includes(code)) out.push(code);
+  }
+  if (out.length === 0) return { ok: false, error: "symbols 必须包含至少 1 个合法标的" };
+  if (out.length > MAX_REAL_SYMBOLS) {
+    return { ok: false, error: `实盘回测最多选择 ${MAX_REAL_SYMBOLS} 个标的，当前 ${out.length} 个` };
+  }
+  return { ok: true, symbols: out };
+}
+
 /** 随机种子：默认按当前时间生成（同场参赛者共享同一种子，保证公平对决） */
 export function sanitizeSeed(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) ? Math.round(v) : Date.now() % 1_000_000;

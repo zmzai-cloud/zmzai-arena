@@ -8,9 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@zmzai/contracts':
+        specifier: github:zmzai-cloud/zmzai-contracts#main
+        version: https://codeload.github.com/zmzai-cloud/zmzai-contracts/tar.gz/c5c150c6f6d3636a191049e463a87c5a27ac35c5(zod@3.25.76)
       '@zmzai/theme':
-        specifier: ^0.8.1
-        version: 0.8.3(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.3.3)
+        specifier: ^0.8.4
+        version: 0.8.4(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.3.3)
       framer-motion:
         specifier: ^11.3.0
         version: 11.18.2(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -26,6 +29,9 @@ importers:
       react-dom:
         specifier: 19.2.8
         version: 19.2.8(react@19.2.8)
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4.0.0
@@ -929,8 +935,14 @@ packages:
   '@ungap/structured-clone@1.4.0':
     resolution: {integrity: sha512-1mEZtMKPM09vDmQt5y7YvmN2+DFTP7Tg0EWXdic8/C6VRnpb33e4ghisCIE3WZjsE2N8mf+QV1Zqh7ZFYLWInQ==}
 
-  '@zmzai/theme@0.8.3':
-    resolution: {integrity: sha512-KETDs7dsZjTIFSWGfGQVy1blDQrRTJDWJvv2+JJ9hVDWVLoFXoVLYlg3IHtPlf7tu25vPraioruTGhXkKXMClA==}
+  '@zmzai/contracts@https://codeload.github.com/zmzai-cloud/zmzai-contracts/tar.gz/c5c150c6f6d3636a191049e463a87c5a27ac35c5':
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/zmzai-cloud/zmzai-contracts/tar.gz/c5c150c6f6d3636a191049e463a87c5a27ac35c5}
+    version: 0.1.0
+    peerDependencies:
+      zod: ^3.25.0
+
+  '@zmzai/theme@0.8.4':
+    resolution: {integrity: sha512-7ZyD4AImXSoFiNwCL3n7t6XCa+rgZ5Xi7IiraRfwdzGiJpDRl6AHW9anrWdR0nd++Ozmhph5wkiFUaNjlXzjog==}
     peerDependencies:
       react: ^19.0.0
       react-dom: ^19.0.0
@@ -1516,6 +1528,9 @@ packages:
 
   vfile@6.0.3:
     resolution: {integrity: sha512-KzIbH/9tXat2u30jf+smMwFCsno4wHVdNmzFyL+T/L3UGqqk6JKfVqOFOZEpZSHADH1k40ab6NUIXZq422ov3Q==}
+
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
@@ -2232,7 +2247,11 @@ snapshots:
 
   '@ungap/structured-clone@1.4.0': {}
 
-  '@zmzai/theme@0.8.3(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.3.3)':
+  '@zmzai/contracts@https://codeload.github.com/zmzai-cloud/zmzai-contracts/tar.gz/c5c150c6f6d3636a191049e463a87c5a27ac35c5(zod@3.25.76)':
+    dependencies:
+      zod: 3.25.76
+
+  '@zmzai/theme@0.8.4(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.3.3)':
     dependencies:
       '@radix-ui/react-dialog': 1.1.23(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@radix-ui/react-dropdown-menu': 2.1.24(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -3083,5 +3102,7 @@ snapshots:
     dependencies:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
+
+  zod@3.25.76: {}
 
   zwitch@2.0.4: {}

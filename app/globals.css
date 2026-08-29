@@ -1,13 +1,12 @@
 @import "tailwindcss";
 @import "@zmzai/theme/tokens";
 @import "@zmzai/theme/fonts";
-/* zmzai v2 — 纯白 + 荧光绿。
-   Token 统一来自 @zmzai/theme（v0.6.0，与 zmzai.cloud 主应用同源），不再内联。 */
+/* zmzai v2 — 墨骨：墨黑结构 + 绿色语义（@zmzai/theme v0.8.1）。
+   Token 统一来自 @zmzai/theme，不再内联。 */
 @source "../node_modules/@zmzai/theme/src/**/*.{ts,tsx}";
 
 @theme {
-  /* App 特有：输入框直角 */
-  --radius-input: 0px;
+  --radius-input: 3px;
 }
 
 :root {
