@@ -12,7 +12,7 @@ importers:
         specifier: github:zmzai-cloud/zmzai-contracts#main
         version: https://codeload.github.com/zmzai-cloud/zmzai-contracts/tar.gz/c5c150c6f6d3636a191049e463a87c5a27ac35c5(zod@3.25.76)
       '@zmzai/theme':
-        specifier: ^0.8.4
+        specifier: 0.8.4
         version: 0.8.4(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(tailwindcss@4.3.3)
       framer-motion:
         specifier: ^11.3.0
