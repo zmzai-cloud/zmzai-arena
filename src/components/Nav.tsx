@@ -51,7 +51,7 @@ export function Nav() {
         <span className="inline-flex items-center gap-2">
           <Logo size={22} />
           <span className="inline-flex items-baseline gap-2.5">
-            <Wordmark size={16} sublabel="trader-arena" />
+            <Wordmark size={16} sublabel="Colophon" />
             <span className="num text-[11px] tracking-wide text-ink-3">arena.zmzai.cloud</span>
           </span>
         </span>
