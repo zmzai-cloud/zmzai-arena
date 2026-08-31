@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PageHeader } from "@zmzai/theme";
 
 interface AdminAccount {
   key: string; // user:<id> / anon:<ip>
@@ -143,26 +144,27 @@ export function AdminConsole() {
   /* ---------- 账户管理 ---------- */
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <div className="num text-[11px] tracking-[0.14em] text-ink-3">OPS · 运营后台</div>
-          <h1 className="mt-1 text-xl font-extrabold">账户发放</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="搜索 Arena ID / IP…"
-            className="w-56 border border-line bg-surface px-3 py-2 text-[13px] text-ink-1 outline-none transition-colors placeholder:text-ink-3 focus:border-accent"
-          />
-          <button
-            onClick={logout}
-            className="rounded border border-line px-3 py-2 text-[12.5px] text-ink-2 transition-colors hover:border-accent hover:text-accent"
-          >
-            登出
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="OPS · 运营后台"
+        icon="coins"
+        title="账户发放"
+        actions={
+          <div className="flex items-center gap-2">
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="搜索 Arena ID / IP…"
+              className="w-56 border border-line bg-surface px-3 py-2 text-[13px] text-ink-1 outline-none transition-colors placeholder:text-ink-3 focus:border-accent"
+            />
+            <button
+              onClick={logout}
+              className="rounded border border-line px-3 py-2 text-[12.5px] text-ink-2 transition-colors hover:border-accent hover:text-accent"
+            >
+              登出
+            </button>
+          </div>
+        }
+      />
 
       {msg && (
         <div

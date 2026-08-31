@@ -141,7 +141,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
         </span>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-[22px] font-extrabold tracking-tight">{agent.name}</h1>
+            <h1 className="text-[22px] font-serif font-bold tracking-tight">{agent.name}</h1>
             {agent.verified && (
               <span className="num rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-bold text-accent">
                 ✓ VERIFIED

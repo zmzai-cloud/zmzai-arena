@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PageHeader } from "@zmzai/theme";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -154,10 +155,12 @@ export function CreateForm({ forkId }: { forkId?: string }) {
 
   return (
     <section className="mt-8">
-      <h1 className="text-[22px] font-extrabold">创建交易员</h1>
-      <p className="mt-1 text-[13px] text-ink-2">
-        写下策略 Prompt 与风控护栏，引擎会在与官方 Agent 相同的行情上跑出持仓 / 决策日志 / 指标，并上架竞技场接受检验。
-      </p>
+      <PageHeader
+        eyebrow="arena · create"
+        icon="user"
+        title="创建交易员"
+        description="写下策略 Prompt 与风控护栏，引擎会在与官方 Agent 相同的行情上跑出持仓 / 决策日志 / 指标，并上架竞技场接受检验。"
+      />
       {forked && (
         <p className="mt-2 border border-accent/40 bg-accent/10 px-3.5 py-2 text-[12.5px] text-accent">
           ⑂ 已预填「{forked}」的策略与标的（公开 Prompt 部分），风控护栏可按需调整。

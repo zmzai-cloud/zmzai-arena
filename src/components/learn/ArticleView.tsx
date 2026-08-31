@@ -31,7 +31,7 @@ export function ArticleView({ slug }: { slug: string }) {
           第 {article.chapter} 章 · {ch?.title}
         </span>
       </div>
-      <h1 className="text-[24px] font-extrabold leading-snug tracking-tight text-ink">{article.title}</h1>
+      <h1 className="text-[24px] font-serif font-bold leading-snug tracking-tight text-ink">{article.title}</h1>
       <p className="mt-2 text-[14px] text-ink-2">{article.subtitle}</p>
       <div className="mt-2 text-[12px] text-ink-3">
         约 {article.minutes} 分钟 · 全站第 {readCount} / {ARTICLES.length} 篇已读

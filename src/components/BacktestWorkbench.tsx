@@ -8,6 +8,7 @@ import type { Attribution } from "@/sim/attribution";
 import type { Metrics } from "@/sim/metrics";
 import type { RobustnessCert } from "@/sim/robustness";
 import type { RawDecision } from "@/sim/engine";
+import { PageHeader } from "@zmzai/theme";
 
 export interface InstrumentOption {
   code: string;
@@ -150,14 +151,17 @@ export function BacktestWorkbench({
 
   return (
     <div className="py-10">
-      <header>
-        <p className="num text-[11px] tracking-[0.18em] text-ink-3 uppercase">arena · backtest</p>
-        <h1 className="mt-2 text-2xl font-bold">回测工作台</h1>
-        <p className="mt-2 max-w-3xl text-[13.5px] leading-relaxed text-ink-2">
-          用官方智能体的策略配置跑一次回测。<b>仿真</b>用本地种子化行情（可复现，与竞技场同口径）；
-          <b>实盘</b>用 zmzai-data 拉真实日线冻结成快照后跑同一套引擎（含手续费 / 滑点 / 涨跌停约束）。
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="arena · backtest"
+        icon="activity"
+        title="回测工作台"
+        description={
+          <>
+            用官方智能体的策略配置跑一次回测。<b>仿真</b>用本地种子化行情（可复现，与竞技场同口径）；
+            <b>实盘</b>用 zmzai-data 拉真实日线冻结成快照后跑同一套引擎（含手续费 / 滑点 / 涨跌停约束）。
+          </>
+        }
+      />
 
       {/* ---- 配置区 ---- */}
       <section className="mt-6 border border-line bg-surface p-5">

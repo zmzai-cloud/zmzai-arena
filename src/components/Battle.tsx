@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { agents as STATIC_AGENTS, type Agent } from "@/data/agents";
 import { loadUserAgents } from "@/lib/userAgents";
 import { fmtPct, riskColor, engineBadge, engineCls } from "@/lib/format";
+import { PageHeader } from "@zmzai/theme";
 import type { Metrics } from "@/sim/metrics";
 
 // 对决擂台：2~6 名 Agent 在「同一段新行情（同 seed + 同周期）」上重跑，
@@ -165,11 +166,17 @@ export function Battle() {
     <div className="mt-6">
       {/* 标题 + 规则 */}
       <div className="border-b border-line pb-4">
-        <h1 className="text-[22px] font-extrabold tracking-tight">对决擂台</h1>
-        <p className="mt-1.5 max-w-[640px] text-[13px] leading-relaxed text-ink-3">
-          选 2~6 名策略同场竞技：所有参赛者在<b className="text-ink-2">同一段新行情</b>（同随机种子、同周期）上重跑，
-          比逐日净值曲线与收益风险指标——公平对决，结果可复现。每场消耗 1 次回测配额。
-        </p>
+        <PageHeader
+          eyebrow="arena · battle"
+          icon="bolt"
+          title="对决擂台"
+          description={
+            <>
+              选 2~6 名策略同场竞技：所有参赛者在<b className="text-ink-2">同一段新行情</b>（同随机种子、同周期）上重跑，
+              比逐日净值曲线与收益风险指标——公平对决，结果可复现。每场消耗 1 次回测配额。
+            </>
+          }
+        />
       </div>
 
       {state === "need-pro" ? (
